@@ -54,6 +54,7 @@ mod filters {
         warp::path!("api" / "save")
             .and(warp::post())
             .and(with_db(db))
+            .and(warp::filters::body::bytes())
             .and_then(handlers::save)
     }
 
@@ -70,11 +71,13 @@ mod handlers {
     use std::time::Instant;
     use warp::http::header::HeaderValue;
     use warp::http::StatusCode;
+    use warp::hyper::body::Bytes;
     use warp::path::Tail;
     use warp::reply::{Json, Response};
 
     pub async fn save<P: AsRef<Path> + Clone + Send>(
         db: P,
+        bytes: Bytes,
     ) -> Result<impl warp::Reply, Infallible> {
         Ok(StatusCode::OK)
     }
