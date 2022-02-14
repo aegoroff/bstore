@@ -54,7 +54,7 @@ mod filters {
         warp::path!("api" / "save")
             .and(warp::post())
             .and(with_db(db))
-            .and(warp::filters::body::bytes())
+            .and(warp::filters::multipart::form().max_length(2 * 1024 * 1024 * 1024))
             .and_then(handlers::save)
     }
 
@@ -71,14 +71,26 @@ mod handlers {
     use std::time::Instant;
     use warp::http::header::HeaderValue;
     use warp::http::StatusCode;
-    use warp::hyper::body::Bytes;
-    use warp::path::Tail;
+    use warp::multipart::{FormData, Part};
     use warp::reply::{Json, Response};
+    use warp::{Error, Stream};
+    use futures_util::{pin_mut, StreamExt};
 
     pub async fn save<P: AsRef<Path> + Clone + Send>(
         db: P,
-        bytes: Bytes,
+        form: FormData,
     ) -> Result<impl warp::Reply, Infallible> {
+        pin_mut!(form);
+
+        while let Some(value) = form.next().await {
+            match value {
+                Ok(part) => {
+                    println!("got {:#?}", part);
+                }
+                Err(_) => {}
+            }
+        }
+
         Ok(StatusCode::OK)
     }
 }
