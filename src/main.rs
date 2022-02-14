@@ -1,3 +1,5 @@
+use bstore::domain::Storage;
+use bstore::sqlite::{Mode, Sqlite};
 use env_logger::Env;
 use std::env;
 use std::net::SocketAddr;
@@ -19,11 +21,10 @@ async fn main() {
     let dir = env::var("BSTORE_DATA_DIR").unwrap_or_else(|_| String::from(CURRENT_DIR));
     let db = Path::new(&dir).join(DB_FILE);
     if !db.exists() {
-        // TODO: Create db
-        // Sqlite::open(db.clone(), Mode::ReadWrite)
-        //     .expect("Database file cannot be created")
-        //     .new_database()
-        //     .unwrap_or_default();
+        Sqlite::open(db.clone(), Mode::ReadWrite)
+            .expect("Database file cannot be created")
+            .new_database()
+            .unwrap_or_default();
     }
 
     let port = env::var("RTDB_PORT").unwrap_or_else(|_| String::from("5000"));
