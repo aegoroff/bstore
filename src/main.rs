@@ -47,13 +47,14 @@ mod filters {
         save(db.clone())
     }
 
-    /// POST /api/save
+    /// POST /api/save/:string
     fn save<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-        warp::path!("api" / "save")
+        warp::path!("api" / "save" )
             .and(warp::post())
             .and(with_db(db))
+            .and(warp::path::param())
             .and(warp::filters::multipart::form().max_length(2 * 1024 * 1024 * 1024))
             .and_then(handlers::save)
     }
@@ -78,6 +79,7 @@ mod handlers {
 
     pub async fn save<P: AsRef<Path> + Clone + Send>(
         db: P,
+        bucket: String,
         form: FormData,
     ) -> Result<impl warp::Reply, Infallible> {
         pin_mut!(form);
