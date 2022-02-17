@@ -30,6 +30,21 @@ impl Storage for Sqlite {
             [],
         )?;
 
+        self.conn.execute(
+            "CREATE TABLE file (
+                  id         INTEGER PRIMARY KEY,
+                  hash       TEXT NOT NULL REFERENCES blob(hash) ON DELETE RESTRICT ON UPDATE RESTRICT,
+                  path       TEXT NOT NULL,
+                  bucket_id  TEXT NOT NULL
+                  )",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE UNIQUE INDEX unique_bucket_file_ix ON file(path, bucket_id)",
+            [],
+        )?;
+
         Ok(())
     }
 }
@@ -45,6 +60,10 @@ impl Sqlite {
 
     fn assign_temp_store_to_memory(&self) -> Result<(), Error> {
         self.pragma_update("temp_store", "MEMORY")
+    }
+
+    fn enable_foreign_keys(&self) -> Result<(), Error> {
+        self.pragma_update("foreign_keys", "ON")
     }
 
     fn disable_journal(&self) -> Result<(), Error> {
