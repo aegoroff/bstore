@@ -51,7 +51,7 @@ mod filters {
     fn save<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-        warp::path!("api" / "save" / String )
+        warp::path!("api" / "save" / String)
             .and(warp::post())
             .and(with_db(db))
             .and(warp::filters::multipart::form().max_length(2 * 1024 * 1024 * 1024))
@@ -67,6 +67,7 @@ mod filters {
 
 mod handlers {
     use super::*;
+    use futures_util::{pin_mut, StreamExt};
     use std::convert::Infallible;
     use std::io::Read;
     use std::time::Instant;
@@ -75,15 +76,19 @@ mod handlers {
     use warp::multipart::{FormData, Part};
     use warp::reply::{Json, Response};
     use warp::{Buf, Error, Stream};
-    use futures_util::{pin_mut, StreamExt};
 
     pub async fn save<P: AsRef<Path> + Clone + Send>(
         bucket: String,
         db: P,
         form: FormData,
     ) -> Result<impl warp::Reply, Infallible> {
-
-        let mut store = Sqlite::open(db, Mode::ReadWrite).unwrap();
+        let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("{:#?}", e);
+                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
 
         info!("bucket {}", bucket);
 
@@ -105,10 +110,13 @@ mod handlers {
                             result.append(&mut buffer);
                         }
                     }
-                    let insert_result = store.insert_file(&file_name, &bucket, result);
+                    let insert_result = repository.insert_file(&file_name, &bucket, result);
                     match insert_result {
                         Ok(written) => {
-                            info!("file: {} read: {} written: {}", &file_name, read_bytes, written);
+                            info!(
+                                "file: {} read: {} written: {}",
+                                &file_name, read_bytes, written
+                            );
                         }
                         Err(e) => {
                             error!("file '{}' not inserted", &file_name);
