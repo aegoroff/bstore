@@ -92,7 +92,6 @@ mod handlers {
         while let Some(value) = form.next().await {
             match value {
                 Ok(mut part) => {
-                    info!("got {:#?}", part);
                     let file_name = part.filename().unwrap_or_default().to_string();
                     let stream = part.stream();
                     pin_mut!(stream);
@@ -101,8 +100,16 @@ mod handlers {
                         let mut rdr = buf.reader();
                         let mut buffer = Vec::new();
                         let read = rdr.read_to_end(&mut buffer).unwrap_or_default();
-                        let written = store.insert_file(&file_name, &bucket, buffer).unwrap_or_default();
-                        info!("read: {} written: {}", read, written);
+                        let insert_result = store.insert_file(&file_name, &bucket, buffer);
+                        match insert_result {
+                            Ok(written) => {
+                                info!("file: {} read: {} written: {}", &file_name, read, written);
+                            }
+                            Err(e) => {
+                                error!("file '{}' not inserted", &file_name);
+                            }
+                        }
+
                     }
                 }
                 Err(e) => {
