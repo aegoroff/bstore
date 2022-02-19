@@ -95,21 +95,24 @@ mod handlers {
                     let file_name = part.filename().unwrap_or_default().to_string();
                     let stream = part.stream();
                     pin_mut!(stream);
+                    let mut result = Vec::new();
+                    let mut read_bytes = 0usize;
                     while let Some(value) = stream.next().await {
-                        let buf = value.unwrap();
-                        let mut rdr = buf.reader();
-                        let mut buffer = Vec::new();
-                        let read = rdr.read_to_end(&mut buffer).unwrap_or_default();
-                        let insert_result = store.insert_file(&file_name, &bucket, buffer);
-                        match insert_result {
-                            Ok(written) => {
-                                info!("file: {} read: {} written: {}", &file_name, read, written);
-                            }
-                            Err(e) => {
-                                error!("file '{}' not inserted", &file_name);
-                            }
+                        if let Ok(buf) = value {
+                            let mut rdr = buf.reader();
+                            let mut buffer = Vec::new();
+                            read_bytes += rdr.read_to_end(&mut buffer).unwrap_or_default();
+                            result.append(&mut buffer);
                         }
-
+                    }
+                    let insert_result = store.insert_file(&file_name, &bucket, result);
+                    match insert_result {
+                        Ok(written) => {
+                            info!("file: {} read: {} written: {}", &file_name, read_bytes, written);
+                        }
+                        Err(e) => {
+                            error!("file '{}' not inserted", &file_name);
+                        }
                     }
                 }
                 Err(e) => {
