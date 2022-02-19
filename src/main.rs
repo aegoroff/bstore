@@ -83,6 +83,8 @@ mod handlers {
         form: FormData,
     ) -> Result<impl warp::Reply, Infallible> {
 
+        let mut store = Sqlite::open(db, Mode::ReadWrite).unwrap();
+
         info!("bucket {}", bucket);
 
         pin_mut!(form);
@@ -91,6 +93,7 @@ mod handlers {
             match value {
                 Ok(mut part) => {
                     info!("got {:#?}", part);
+                    let file_name = part.filename().unwrap_or_default().to_string();
                     let stream = part.stream();
                     pin_mut!(stream);
                     while let Some(value) = stream.next().await {
@@ -98,7 +101,8 @@ mod handlers {
                         let mut rdr = buf.reader();
                         let mut buffer = Vec::new();
                         let read = rdr.read_to_end(&mut buffer).unwrap_or_default();
-                        info!("read: {}", read);
+                        let written = store.insert_file(&file_name, &bucket, buffer).unwrap_or_default();
+                        info!("read: {} written: {}", read, written);
                     }
                 }
                 Err(e) => {

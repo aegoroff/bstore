@@ -1,7 +1,8 @@
+use std::io::Write;
 use std::path::Path;
 
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
-use rusqlite::{params, Connection, Error, OpenFlags, Row, Transaction};
+use rusqlite::{params, Connection, Error, OpenFlags, DatabaseName};
+use rusqlite::blob::ZeroBlob;
 
 use crate::domain::Storage;
 
@@ -32,7 +33,7 @@ impl Storage for Sqlite {
 
         self.conn.execute(
             "CREATE TABLE file (
-                  id         INTEGER PRIMARY KEY,
+                  id         INTEGER PRIMARY KEY AUTOINCREMENT,
                   hash       TEXT NOT NULL REFERENCES blob(hash) ON DELETE RESTRICT ON UPDATE RESTRICT,
                   path       TEXT NOT NULL,
                   bucket_id  TEXT NOT NULL
@@ -46,6 +47,46 @@ impl Storage for Sqlite {
         )?;
 
         Ok(())
+    }
+
+    fn insert_file(&mut self, path: &str, bucket: &str, data: Vec<u8>) -> Result<usize, Self::Err> {
+        self.assign_cache_size()?;
+        self.enable_foreign_keys()?;
+
+        let hash = blake3::hash(&data);
+        let hash = hash.to_string();
+
+        let tx = self.conn.transaction()?;
+
+        let mut stmt = tx.prepare("SELECT hash FROM blob WHERE hash = ?1")?;
+
+        let exists = stmt.exists(params![&hash])?;
+        std::mem::drop(stmt);
+
+        let mut bytes_written = 0;
+        if !exists {
+            let len = data.len() as i32;
+            tx.execute("INSERT INTO blob (hash, data) VALUES (?1, ?2)", params![&hash, &ZeroBlob(len)])?;
+
+            let rowid = tx.last_insert_rowid();
+
+            let mut blob = tx.blob_open(DatabaseName::Main, "blob", "data", rowid, false)?;
+            bytes_written = blob.write(&data).unwrap_or_default();
+            std::mem::drop(blob);
+        }
+
+        tx.prepare_cached(
+            "INSERT INTO file (hash, path, bucket_id)
+                 VALUES (?1, ?2, ?3)",
+        )?.execute(params![
+            &hash,
+            path,
+            bucket
+        ])?;
+
+        tx.commit()?;
+
+        Ok(bytes_written)
     }
 }
 
