@@ -116,8 +116,8 @@ mod handlers {
                                 &file_name, read_bytes, written
                             );
                         }
-                        Err(_) => {
-                            error!("file '{}' not inserted", &file_name);
+                        Err(e) => {
+                            error!("file '{}' not inserted. Error: {}", &file_name, e);
                         }
                     }
                 }

@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::path::Path;
+use log::error;
 
 use rusqlite::blob::ZeroBlob;
 use rusqlite::{params, Connection, DatabaseName, Error, OpenFlags};
@@ -68,7 +69,7 @@ impl Storage for Sqlite {
         if !exists {
             let len = data.len() as i32;
             tx.execute(
-                "INSERT INTO blob (hash, data) VALUES (?1, ?2)",
+                "INSERT INTO blob (blake3_hash, data) VALUES (?1, ?2)",
                 params![&hash, &ZeroBlob(len)],
             )?;
 
@@ -76,7 +77,12 @@ impl Storage for Sqlite {
 
             let mut blob = tx.blob_open(DatabaseName::Main, "blob", "data", rowid, false)?;
             bytes_written = data.len();
-            blob.write_all(&data).unwrap_or_default();
+            match blob.write_all(&data) {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("{}", e);
+                }
+            }
             blob.flush().unwrap_or_default();
             blob.close()?;
         }

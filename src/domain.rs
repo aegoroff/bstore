@@ -1,5 +1,7 @@
+use std::fmt::{Debug, Display};
+
 pub trait Storage {
-    type Err;
+    type Err : Debug + Display;
 
     fn new_database(&self) -> Result<(), Self::Err>;
 
