@@ -61,7 +61,7 @@ impl Storage for Sqlite {
         let mut stmt = tx.prepare("SELECT hash FROM blob WHERE hash = ?1")?;
 
         let exists = stmt.exists(params![&hash])?;
-        std::mem::drop(stmt);
+        stmt.finalize()?;
 
         let mut bytes_written = 0;
         if !exists {
