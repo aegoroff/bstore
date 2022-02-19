@@ -51,10 +51,9 @@ mod filters {
     fn save<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-        warp::path!("api" / "save" )
+        warp::path!("api" / "save" / String )
             .and(warp::post())
             .and(with_db(db))
-            .and(warp::path::param())
             .and(warp::filters::multipart::form().max_length(2 * 1024 * 1024 * 1024))
             .and_then(handlers::save)
     }
@@ -74,22 +73,35 @@ mod handlers {
     use warp::http::StatusCode;
     use warp::multipart::{FormData, Part};
     use warp::reply::{Json, Response};
-    use warp::{Error, Stream};
+    use warp::{Buf, Error, Stream};
     use futures_util::{pin_mut, StreamExt};
 
     pub async fn save<P: AsRef<Path> + Clone + Send>(
-        db: P,
         bucket: String,
+        db: P,
         form: FormData,
     ) -> Result<impl warp::Reply, Infallible> {
+
+        info!("bucket {}", bucket);
+
         pin_mut!(form);
 
         while let Some(value) = form.next().await {
             match value {
-                Ok(part) => {
-                    println!("got {:#?}", part);
+                Ok(mut part) => {
+                    info!("got {:#?}", part);
+                    let d = part.data().await;
+                    match d {
+                        None => {}
+                        Some(r) => {
+                            let buf = r.unwrap();
+                            info!("size: {}", buf.remaining());
+                        }
+                    }
                 }
-                Err(_) => {}
+                Err(e) => {
+                    error!("{:#?}", e);
+                }
             }
         }
 
