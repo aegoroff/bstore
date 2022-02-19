@@ -70,12 +70,10 @@ mod handlers {
     use futures_util::{pin_mut, StreamExt};
     use std::convert::Infallible;
     use std::io::Read;
-    use std::time::Instant;
-    use warp::http::header::HeaderValue;
     use warp::http::StatusCode;
-    use warp::multipart::{FormData, Part};
+    use warp::multipart::FormData;
     use warp::reply::{Json, Response};
-    use warp::{Buf, Error, Stream};
+    use warp::Buf;
 
     pub async fn save<P: AsRef<Path> + Clone + Send>(
         bucket: String,
@@ -96,7 +94,7 @@ mod handlers {
 
         while let Some(value) = form.next().await {
             match value {
-                Ok(mut part) => {
+                Ok(part) => {
                     let file_name = part.filename().unwrap_or_default().to_string();
                     let stream = part.stream();
                     pin_mut!(stream);
@@ -118,7 +116,7 @@ mod handlers {
                                 &file_name, read_bytes, written
                             );
                         }
-                        Err(e) => {
+                        Err(_) => {
                             error!("file '{}' not inserted", &file_name);
                         }
                     }

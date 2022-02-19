@@ -1,8 +1,8 @@
 use std::io::Write;
 use std::path::Path;
 
-use rusqlite::{params, Connection, Error, OpenFlags, DatabaseName};
 use rusqlite::blob::ZeroBlob;
+use rusqlite::{params, Connection, DatabaseName, Error, OpenFlags};
 
 use crate::domain::Storage;
 
@@ -25,7 +25,7 @@ impl Storage for Sqlite {
 
         self.conn.execute(
             "CREATE TABLE blob (
-                  hash           TEXT PRIMARY KEY,
+                  blake3_hash    TEXT PRIMARY KEY,
                   data           BLOB NOT NULL
                   )",
             [],
@@ -33,10 +33,10 @@ impl Storage for Sqlite {
 
         self.conn.execute(
             "CREATE TABLE file (
-                  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                  hash       TEXT NOT NULL REFERENCES blob(hash) ON DELETE RESTRICT ON UPDATE RESTRICT,
-                  path       TEXT NOT NULL,
-                  bucket_id  TEXT NOT NULL
+                  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                  blake3_hash  TEXT NOT NULL REFERENCES blob(blake3_hash) ON DELETE RESTRICT ON UPDATE RESTRICT,
+                  path         TEXT NOT NULL,
+                  bucket_id    TEXT NOT NULL
                   )",
             [],
         )?;
@@ -52,13 +52,14 @@ impl Storage for Sqlite {
     fn insert_file(&mut self, path: &str, bucket: &str, data: Vec<u8>) -> Result<usize, Self::Err> {
         self.assign_cache_size()?;
         self.enable_foreign_keys()?;
+        self.pragma_update("synchronous", "FULL")?;
 
         let hash = blake3::hash(&data);
         let hash = hash.to_string();
 
         let tx = self.conn.transaction()?;
 
-        let mut stmt = tx.prepare("SELECT hash FROM blob WHERE hash = ?1")?;
+        let mut stmt = tx.prepare("SELECT blake3_hash FROM blob WHERE blake3_hash = ?1")?;
 
         let exists = stmt.exists(params![&hash])?;
         stmt.finalize()?;
@@ -66,23 +67,25 @@ impl Storage for Sqlite {
         let mut bytes_written = 0;
         if !exists {
             let len = data.len() as i32;
-            tx.execute("INSERT INTO blob (hash, data) VALUES (?1, ?2)", params![&hash, &ZeroBlob(len)])?;
+            tx.execute(
+                "INSERT INTO blob (hash, data) VALUES (?1, ?2)",
+                params![&hash, &ZeroBlob(len)],
+            )?;
 
             let rowid = tx.last_insert_rowid();
 
             let mut blob = tx.blob_open(DatabaseName::Main, "blob", "data", rowid, false)?;
-            bytes_written = blob.write(&data).unwrap_or_default();
+            bytes_written = data.len();
+            blob.write_all(&data).unwrap_or_default();
+            blob.flush().unwrap_or_default();
             blob.close()?;
         }
 
         tx.prepare_cached(
-            "INSERT INTO file (hash, path, bucket_id)
+            "INSERT INTO file (blake3_hash, path, bucket_id)
                  VALUES (?1, ?2, ?3)",
-        )?.execute(params![
-            &hash,
-            path,
-            bucket
-        ])?;
+        )?
+        .execute(params![&hash, path, bucket])?;
 
         tx.commit()?;
 
@@ -99,20 +102,8 @@ impl Sqlite {
         Ok(Self { conn: c? })
     }
 
-    fn assign_temp_store_to_memory(&self) -> Result<(), Error> {
-        self.pragma_update("temp_store", "MEMORY")
-    }
-
     fn enable_foreign_keys(&self) -> Result<(), Error> {
         self.pragma_update("foreign_keys", "ON")
-    }
-
-    fn disable_journal(&self) -> Result<(), Error> {
-        self.pragma_update("journal_mode", "OFF")
-    }
-
-    fn disable_sync_mode(&self) -> Result<(), Error> {
-        self.pragma_update("synchronous", "OFF")
     }
 
     fn assign_cache_size(&self) -> Result<(), Error> {
