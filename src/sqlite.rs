@@ -72,7 +72,7 @@ impl Storage for Sqlite {
 
             let mut blob = tx.blob_open(DatabaseName::Main, "blob", "data", rowid, false)?;
             bytes_written = blob.write(&data).unwrap_or_default();
-            std::mem::drop(blob);
+            blob.close()?;
         }
 
         tx.prepare_cached(
