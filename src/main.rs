@@ -68,6 +68,7 @@ mod filters {
 mod handlers {
     use super::*;
     use std::convert::Infallible;
+    use std::io::Read;
     use std::time::Instant;
     use warp::http::header::HeaderValue;
     use warp::http::StatusCode;
@@ -90,13 +91,14 @@ mod handlers {
             match value {
                 Ok(mut part) => {
                     info!("got {:#?}", part);
-                    let d = part.data().await;
-                    match d {
-                        None => {}
-                        Some(r) => {
-                            let buf = r.unwrap();
-                            info!("size: {}", buf.remaining());
-                        }
+                    let stream = part.stream();
+                    pin_mut!(stream);
+                    while let Some(value) = stream.next().await {
+                        let buf = value.unwrap();
+                        let mut rdr = buf.reader();
+                        let mut buffer = Vec::new();
+                        let read = rdr.read_to_end(&mut buffer).unwrap_or_default();
+                        info!("read: {}", read);
                     }
                 }
                 Err(e) => {
