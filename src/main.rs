@@ -27,7 +27,7 @@ async fn main() {
             .unwrap_or_default();
     }
 
-    let port = env::var("RTDB_PORT").unwrap_or_else(|_| String::from("5000"));
+    let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
     let socket: SocketAddr = format!("0.0.0.0:{port}").parse().unwrap();
 
     let routes = filters::routes(db)
