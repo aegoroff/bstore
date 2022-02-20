@@ -92,7 +92,7 @@ mod handlers {
         let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
             Ok(s) => s,
             Err(e) => {
-                error!("{:#?}", e);
+                error!("{}", e);
                 return Ok(StatusCode::INTERNAL_SERVER_ERROR);
             }
         };
@@ -146,7 +146,7 @@ mod handlers {
         let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
             Ok(s) => s,
             Err(e) => {
-                error!("{:#?}", e);
+                error!("{}", e);
                 return Ok(StatusCode::INTERNAL_SERVER_ERROR);
             }
         };

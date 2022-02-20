@@ -28,7 +28,8 @@ impl Storage for Sqlite {
         self.conn.execute(
             "CREATE TABLE blob (
                   blake3_hash    TEXT PRIMARY KEY,
-                  data           BLOB NOT NULL
+                  data           BLOB NOT NULL,
+                  size           INTEGER NOT NULL
                   )",
             [],
         )?;
@@ -38,13 +39,13 @@ impl Storage for Sqlite {
                   id           INTEGER PRIMARY KEY AUTOINCREMENT,
                   blake3_hash  TEXT NOT NULL REFERENCES blob(blake3_hash) ON DELETE RESTRICT ON UPDATE RESTRICT,
                   path         TEXT NOT NULL,
-                  bucket_id    TEXT NOT NULL
+                  bucket       TEXT NOT NULL
                   )",
             [],
         )?;
 
         self.conn.execute(
-            "CREATE UNIQUE INDEX unique_bucket_file_ix ON file(path, bucket_id)",
+            "CREATE UNIQUE INDEX bucket_path_unique_ix ON file(path, bucket)",
             [],
         )?;
 
@@ -70,8 +71,8 @@ impl Storage for Sqlite {
         if !exists {
             let len = data.len() as i32;
             tx.execute(
-                "INSERT INTO blob (blake3_hash, data) VALUES (?1, ?2)",
-                params![&hash, &ZeroBlob(len)],
+                "INSERT INTO blob (blake3_hash, data, size) VALUES (?1, ?2, ?3)",
+                params![&hash, &ZeroBlob(len), len],
             )?;
 
             let rowid = tx.last_insert_rowid();
@@ -89,7 +90,7 @@ impl Storage for Sqlite {
         }
 
         tx.prepare_cached(
-            "INSERT INTO file (blake3_hash, path, bucket_id)
+            "INSERT INTO file (blake3_hash, path, bucket)
                  VALUES (?1, ?2, ?3)",
         )?
         .execute(params![&hash, path, bucket])?;
@@ -104,7 +105,7 @@ impl Storage for Sqlite {
         self.pragma_update("synchronous", "FULL")?;
 
         let tx = self.conn.transaction()?;
-        let mut stmt = tx.prepare("DELETE FROM file WHERE bucket_id = ?1")?;
+        let mut stmt = tx.prepare("DELETE FROM file WHERE bucket = ?1")?;
         let result = stmt.execute(params![bucket])?;
         stmt.finalize()?;
 
