@@ -44,7 +44,10 @@ mod filters {
     pub fn routes<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-        insert_many(db.clone()).or(delete_bucket(db.clone()))
+        insert_many(db.clone())
+            .or(delete_bucket(db.clone()))
+            .or(get_buckets(db.clone()))
+            .or(get_files(db.clone()))
     }
 
     /// POST /api/:string
@@ -58,6 +61,7 @@ mod filters {
             .and_then(handlers::insert_many_from_form)
     }
 
+    /// DELETE /api/:string
     fn delete_bucket<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -65,6 +69,26 @@ mod filters {
             .and(warp::delete())
             .and(with_db(db))
             .and_then(handlers::delete_bucket)
+    }
+
+    /// GET /api/bucket/
+    fn get_buckets<P: AsRef<Path> + Clone + Send>(
+        db: P,
+    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+        warp::path!("api" / "bucket")
+            .and(warp::get())
+            .and(with_db(db))
+            .and_then(handlers::get_buckets)
+    }
+
+    /// GET /api/bucket/:string
+    fn get_files<P: AsRef<Path> + Clone + Send>(
+        db: P,
+    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+        warp::path!("api" / "bucket" / String)
+            .and(warp::get())
+            .and(with_db(db))
+            .and_then(handlers::get_files)
     }
 
     fn with_db<P: AsRef<Path> + Clone + Send>(
@@ -76,7 +100,9 @@ mod filters {
 
 mod handlers {
     use super::*;
+    use bstore::domain::{Bucket, File};
     use futures_util::{pin_mut, StreamExt};
+    use serde::Serialize;
     use std::convert::Infallible;
     use std::io::Read;
     use warp::http::StatusCode;
@@ -154,7 +180,10 @@ mod handlers {
         let delete_result = repository.delete_bucket(&bucket);
         match delete_result {
             Ok(deleted) => {
-                info!("bucket: {} deleted. The number of files removed is {}", &bucket, deleted);
+                info!(
+                    "bucket: {} deleted. The number of files removed is {}",
+                    &bucket, deleted
+                );
             }
             Err(e) => {
                 error!("bucket '{}' not deleted. Error: {}", &bucket, e);
@@ -162,5 +191,33 @@ mod handlers {
         }
 
         Ok(StatusCode::OK)
+    }
+
+    pub async fn get_buckets<P: AsRef<Path> + Clone + Send>(db: P) -> Result<Json, Infallible> {
+        let mut repository = match Sqlite::open(db, Mode::ReadOnly) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("{}", e);
+                return success(Vec::<Bucket>::new());
+            }
+        };
+        let result = repository.get_buckets().unwrap_or_default();
+        success(result)
+    }
+
+    pub async fn get_files<P: AsRef<Path> + Clone + Send>(bucket: String, db: P) -> Result<Json, Infallible> {
+        let mut repository = match Sqlite::open(db, Mode::ReadOnly) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("{}", e);
+                return success(Vec::<File>::new());
+            }
+        };
+        let result = repository.get_files(&bucket).unwrap_or_default();
+        success(result)
+    }
+
+    fn success<T: Serialize>(result: T) -> Result<Json, Infallible> {
+        Ok(warp::reply::json(&result))
     }
 }

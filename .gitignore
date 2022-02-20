@@ -2,3 +2,5 @@
 /Cargo.lock
 /.idea/
 /bstore.db
+/bstore.db-shm
+/bstore.db-wal

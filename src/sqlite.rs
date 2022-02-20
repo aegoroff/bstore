@@ -5,7 +5,7 @@ use std::path::Path;
 use rusqlite::blob::ZeroBlob;
 use rusqlite::{params, Connection, DatabaseName, Error, OpenFlags};
 
-use crate::domain::Storage;
+use crate::domain::{Bucket, File, Storage};
 
 const CACHE_SIZE: &str = "4096";
 
@@ -109,13 +109,54 @@ impl Storage for Sqlite {
         let result = stmt.execute(params![bucket])?;
         stmt.finalize()?;
 
-        let mut stmt = tx.prepare("DELETE FROM blob WHERE blake3_hash NOT IN (SELECT blake3_hash FROM file)")?;
+        let mut stmt =
+            tx.prepare("DELETE FROM blob WHERE blake3_hash NOT IN (SELECT blake3_hash FROM file)")?;
         stmt.execute(params![])?;
         stmt.finalize()?;
 
         tx.commit()?;
 
         Ok(result)
+    }
+
+    fn get_buckets(&mut self) -> Result<Vec<Bucket>, Self::Err> {
+        self.enable_foreign_keys()?;
+        self.pragma_update("synchronous", "FULL")?;
+
+        let mut stmt = self
+            .conn
+            .prepare("SELECT bucket, count(bucket) FROM file GROUP BY bucket")?;
+        let buckets = stmt.query_map([], |row| {
+            let b = Bucket {
+                id: row.get(0)?,
+                files_count: row.get(1)?,
+            };
+            Ok(b)
+        })?;
+
+        Ok(buckets.filter(|r| r.is_ok()).map(|r| r.unwrap()).collect())
+    }
+
+    fn get_files(&mut self, bucket: &str) -> Result<Vec<File>, Self::Err> {
+        self.enable_foreign_keys()?;
+        self.pragma_update("synchronous", "FULL")?;
+
+        let mut stmt = self
+            .conn
+            .prepare("SELECT file.id, file.path, file.bucket, blob.size \
+                           FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
+                           WHERE file.bucket = ?1")?;
+        let files = stmt.query_map([bucket], |row| {
+            let file = File {
+                id: row.get(0)?,
+                path: row.get(1)?,
+                bucket: row.get(2)?,
+                size: row.get(3)?,
+            };
+            Ok(file)
+        })?;
+
+        Ok(files.filter(|r| r.is_ok()).map(|r| r.unwrap()).collect())
     }
 }
 
