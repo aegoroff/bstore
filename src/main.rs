@@ -71,21 +71,21 @@ mod filters {
             .and_then(handlers::delete_bucket)
     }
 
-    /// GET /api/bucket/
+    /// GET /api/
     fn get_buckets<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-        warp::path!("api" / "bucket")
+        warp::path!("api" )
             .and(warp::get())
             .and(with_db(db))
             .and_then(handlers::get_buckets)
     }
 
-    /// GET /api/bucket/:string
+    /// GET /api/:string
     fn get_files<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-        warp::path!("api" / "bucket" / String)
+        warp::path!("api" / String)
             .and(warp::get())
             .and(with_db(db))
             .and_then(handlers::get_files)
