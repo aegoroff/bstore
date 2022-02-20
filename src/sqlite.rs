@@ -1,5 +1,5 @@
 use log::error;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::Path;
 
 use rusqlite::blob::ZeroBlob;
@@ -157,6 +157,23 @@ impl Storage for Sqlite {
         })?;
 
         Ok(files.filter(|r| r.is_ok()).map(|r| r.unwrap()).collect())
+    }
+
+    fn get_file(&mut self, id: i64) -> Result<Vec<u8>, Self::Err> {
+        self.enable_foreign_keys()?;
+        self.set_synchronous_full()?;
+
+        let mut stmt = self.conn.prepare("SELECT rowid, size FROM blob WHERE blake3_hash IN (SELECT blake3_hash FROM file WHERE id = ?1)")?;
+        let (rowid, size) : (i64, usize) = stmt.query_row([id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        stmt.finalize()?;
+
+        let mut blob = self.conn.blob_open(DatabaseName::Main, "blob", "data", rowid, true)?;
+        let mut result = Vec::<u8>::new();
+        result.reserve_exact(size);
+        blob.read_to_end(&mut result).unwrap_or_default();
+        blob.close()?;
+
+        Ok(result)
     }
 }
 

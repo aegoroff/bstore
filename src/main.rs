@@ -48,6 +48,7 @@ mod filters {
             .or(delete_bucket(db.clone()))
             .or(get_buckets(db.clone()))
             .or(get_files(db.clone()))
+            .or(get_file(db.clone()))
     }
 
     /// POST /api/:string
@@ -89,6 +90,16 @@ mod filters {
             .and(warp::get())
             .and(with_db(db))
             .and_then(handlers::get_files)
+    }
+
+    /// GET /api/:string/:i64
+    fn get_file<P: AsRef<Path> + Clone + Send>(
+        db: P,
+    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+        warp::path!("api" / "file" / i64)
+            .and(warp::get())
+            .and(with_db(db))
+            .and_then(handlers::get_file)
     }
 
     fn with_db<P: AsRef<Path> + Clone + Send>(
@@ -162,7 +173,7 @@ mod handlers {
             }
         }
 
-        Ok(StatusCode::OK)
+        Ok(StatusCode::CREATED)
     }
 
     pub async fn delete_bucket<P: AsRef<Path> + Clone + Send>(
@@ -195,7 +206,7 @@ mod handlers {
         if result == 0 {
             Ok(StatusCode::NOT_FOUND)
         } else {
-            Ok(StatusCode::OK)
+            Ok(StatusCode::NO_CONTENT)
         }
     }
 
@@ -224,6 +235,36 @@ mod handlers {
         };
         let result = repository.get_files(&bucket).unwrap_or_default();
         success(result)
+    }
+
+    pub async fn get_file<P: AsRef<Path> + Clone + Send>(
+        id: i64,
+        db: P,
+    ) -> Result<impl warp::Reply, Infallible> {
+        let mut repository = match Sqlite::open(db, Mode::ReadOnly) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("{}", e);
+                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+        let result = repository.get_file(id);
+        let result = match result {
+            Ok(r) => r,
+            Err(e) => {
+                error!("{}", e);
+                return Ok(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        };
+
+        let builder = warp::http::response::Builder::new();
+
+        let response = builder
+            .header("content-type", "application/octet-stream")
+            .status(200)
+            .body(result).unwrap_or_default();
+
+        Ok(StatusCode::OK)
     }
 
     fn success<T: Serialize>(result: T) -> Result<Json, Infallible> {
