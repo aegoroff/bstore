@@ -98,6 +98,24 @@ impl Storage for Sqlite {
 
         Ok(bytes_written)
     }
+
+    fn delete_bucket(&mut self, bucket: &str) -> Result<usize, Self::Err> {
+        self.enable_foreign_keys()?;
+        self.pragma_update("synchronous", "FULL")?;
+
+        let tx = self.conn.transaction()?;
+        let mut stmt = tx.prepare("DELETE FROM file WHERE bucket_id = ?1")?;
+        let result = stmt.execute(params![bucket])?;
+        stmt.finalize()?;
+
+        let mut stmt = tx.prepare("DELETE FROM blob WHERE blake3_hash NOT IN (SELECT blake3_hash FROM file)")?;
+        stmt.execute(params![])?;
+        stmt.finalize()?;
+
+        tx.commit()?;
+
+        Ok(result)
+    }
 }
 
 impl Sqlite {

@@ -44,18 +44,27 @@ mod filters {
     pub fn routes<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-        save(db.clone())
+        insert_many(db.clone()).or(delete_bucket(db.clone()))
     }
 
-    /// POST /api/save/:string
-    fn save<P: AsRef<Path> + Clone + Send>(
+    /// POST /api/:string
+    fn insert_many<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-        warp::path!("api" / "save" / String)
+        warp::path!("api" / String)
             .and(warp::post())
             .and(with_db(db))
             .and(warp::filters::multipart::form().max_length(2 * 1024 * 1024 * 1024))
-            .and_then(handlers::save)
+            .and_then(handlers::insert_many_from_form)
+    }
+
+    fn delete_bucket<P: AsRef<Path> + Clone + Send>(
+        db: P,
+    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+        warp::path!("api" / String)
+            .and(warp::delete())
+            .and(with_db(db))
+            .and_then(handlers::delete_bucket)
     }
 
     fn with_db<P: AsRef<Path> + Clone + Send>(
@@ -75,7 +84,7 @@ mod handlers {
     use warp::reply::{Json, Response};
     use warp::Buf;
 
-    pub async fn save<P: AsRef<Path> + Clone + Send>(
+    pub async fn insert_many_from_form<P: AsRef<Path> + Clone + Send>(
         bucket: String,
         db: P,
         form: FormData,
@@ -124,6 +133,31 @@ mod handlers {
                 Err(e) => {
                     error!("{:#?}", e);
                 }
+            }
+        }
+
+        Ok(StatusCode::OK)
+    }
+
+    pub async fn delete_bucket<P: AsRef<Path> + Clone + Send>(
+        bucket: String,
+        db: P,
+    ) -> Result<impl warp::Reply, Infallible> {
+        let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("{:#?}", e);
+                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        let delete_result = repository.delete_bucket(&bucket);
+        match delete_result {
+            Ok(deleted) => {
+                info!("bucket: {} deleted. The number of files removed is {}", &bucket, deleted);
+            }
+            Err(e) => {
+                error!("bucket '{}' not deleted. Error: {}", &bucket, e);
             }
         }
 
