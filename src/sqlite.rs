@@ -55,7 +55,7 @@ impl Storage for Sqlite {
     fn insert_file(&mut self, path: &str, bucket: &str, data: Vec<u8>) -> Result<usize, Self::Err> {
         self.assign_cache_size()?;
         self.enable_foreign_keys()?;
-        self.pragma_update("synchronous", "FULL")?;
+        self.set_synchronous_full()?;
 
         let hash = blake3::hash(&data);
         let hash = hash.to_string();
@@ -102,7 +102,7 @@ impl Storage for Sqlite {
 
     fn delete_bucket(&mut self, bucket: &str) -> Result<usize, Self::Err> {
         self.enable_foreign_keys()?;
-        self.pragma_update("synchronous", "FULL")?;
+        self.set_synchronous_full()?;
 
         let tx = self.conn.transaction()?;
         let mut stmt = tx.prepare("DELETE FROM file WHERE bucket = ?1")?;
@@ -121,7 +121,7 @@ impl Storage for Sqlite {
 
     fn get_buckets(&mut self) -> Result<Vec<Bucket>, Self::Err> {
         self.enable_foreign_keys()?;
-        self.pragma_update("synchronous", "FULL")?;
+        self.set_synchronous_full()?;
 
         let mut stmt = self
             .conn
@@ -139,7 +139,7 @@ impl Storage for Sqlite {
 
     fn get_files(&mut self, bucket: &str) -> Result<Vec<File>, Self::Err> {
         self.enable_foreign_keys()?;
-        self.pragma_update("synchronous", "FULL")?;
+        self.set_synchronous_full()?;
 
         let mut stmt = self
             .conn
@@ -175,6 +175,10 @@ impl Sqlite {
 
     fn assign_cache_size(&self) -> Result<(), Error> {
         self.pragma_update("cache_size", CACHE_SIZE)
+    }
+
+    fn set_synchronous_full(&self) -> Result<(), Error> {
+        self.pragma_update("synchronous", "FULL")
     }
 
     fn pragma_update(&self, name: &str, value: &str) -> Result<(), Error> {

@@ -107,7 +107,7 @@ mod handlers {
     use std::io::Read;
     use warp::http::StatusCode;
     use warp::multipart::FormData;
-    use warp::reply::{Json, Response};
+    use warp::reply::Json;
     use warp::Buf;
 
     pub async fn insert_many_from_form<P: AsRef<Path> + Clone + Send>(
@@ -205,7 +205,10 @@ mod handlers {
         success(result)
     }
 
-    pub async fn get_files<P: AsRef<Path> + Clone + Send>(bucket: String, db: P) -> Result<Json, Infallible> {
+    pub async fn get_files<P: AsRef<Path> + Clone + Send>(
+        bucket: String,
+        db: P,
+    ) -> Result<Json, Infallible> {
         let mut repository = match Sqlite::open(db, Mode::ReadOnly) {
             Ok(s) => s,
             Err(e) => {
