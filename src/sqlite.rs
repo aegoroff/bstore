@@ -7,7 +7,7 @@ use rusqlite::{params, Connection, DatabaseName, Error, OpenFlags};
 
 use crate::domain::{Bucket, File, Storage};
 
-const CACHE_SIZE: &str = "4096";
+const CACHE_SIZE: &str = "16384";
 
 pub enum Mode {
     ReadWrite,
