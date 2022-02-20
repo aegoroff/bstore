@@ -178,19 +178,25 @@ mod handlers {
         };
 
         let delete_result = repository.delete_bucket(&bucket);
-        match delete_result {
+        let result = match delete_result {
             Ok(deleted) => {
                 info!(
                     "bucket: {} deleted. The number of files removed is {}",
                     &bucket, deleted
                 );
+                deleted
             }
             Err(e) => {
                 error!("bucket '{}' not deleted. Error: {}", &bucket, e);
+                0
             }
-        }
+        };
 
-        Ok(StatusCode::OK)
+        if result == 0 {
+            Ok(StatusCode::NOT_FOUND)
+        } else {
+            Ok(StatusCode::OK)
+        }
     }
 
     pub async fn get_buckets<P: AsRef<Path> + Clone + Send>(db: P) -> Result<Json, Infallible> {
