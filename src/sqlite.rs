@@ -1,6 +1,6 @@
+use log::error;
 use std::io::Write;
 use std::path::Path;
-use log::error;
 
 use rusqlite::blob::ZeroBlob;
 use rusqlite::{params, Connection, DatabaseName, Error, OpenFlags};
@@ -23,6 +23,7 @@ impl Storage for Sqlite {
 
     fn new_database(&self) -> Result<(), Self::Err> {
         self.pragma_update("encoding", "UTF-8")?;
+        self.pragma_update("journal_mode", "WAL")?;
 
         self.conn.execute(
             "CREATE TABLE blob (
