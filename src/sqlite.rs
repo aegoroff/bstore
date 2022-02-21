@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 use rusqlite::blob::ZeroBlob;
-use rusqlite::{params, Connection, DatabaseName, Error, OpenFlags};
+use rusqlite::{params, Connection, DatabaseName, Error, OpenFlags, Transaction};
 
 use crate::domain::{Bucket, File, Storage};
 
@@ -109,10 +109,7 @@ impl Storage for Sqlite {
         let result = stmt.execute(params![bucket])?;
         stmt.finalize()?;
 
-        let mut stmt =
-            tx.prepare("DELETE FROM blob WHERE blake3_hash NOT IN (SELECT blake3_hash FROM file)")?;
-        stmt.execute(params![])?;
-        stmt.finalize()?;
+        Self::cleanup_blobs(&tx)?;
 
         tx.commit()?;
 
@@ -141,11 +138,11 @@ impl Storage for Sqlite {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
-        let mut stmt = self
-            .conn
-            .prepare("SELECT file.id, file.path, file.bucket, blob.size \
+        let mut stmt = self.conn.prepare(
+            "SELECT file.id, file.path, file.bucket, blob.size \
                            FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
-                           WHERE file.bucket = ?1")?;
+                           WHERE file.bucket = ?1",
+        )?;
         let files = stmt.query_map([bucket], |row| {
             let file = File {
                 id: row.get(0)?,
@@ -164,10 +161,12 @@ impl Storage for Sqlite {
         self.set_synchronous_full()?;
 
         let mut stmt = self.conn.prepare("SELECT rowid FROM blob WHERE blake3_hash IN (SELECT blake3_hash FROM file WHERE id = ?1)")?;
-        let rowid : i64 = stmt.query_row([id], |r| r.get(0))?;
+        let rowid: i64 = stmt.query_row([id], |r| r.get(0))?;
         stmt.finalize()?;
 
-        let b = self.conn.blob_open(DatabaseName::Main, "blob", "data", rowid, true)?;
+        let b = self
+            .conn
+            .blob_open(DatabaseName::Main, "blob", "data", rowid, true)?;
         Ok(Box::new(b))
     }
 
@@ -176,20 +175,32 @@ impl Storage for Sqlite {
         self.set_synchronous_full()?;
 
         let mut stmt = self.conn.prepare("SELECT path FROM file WHERE id = ?1")?;
-        let result : String = stmt.query_row([id], |r| r.get(0))?;
+        let result: String = stmt.query_row([id], |r| r.get(0))?;
         stmt.finalize()?;
 
         match result.rfind('\\') {
-            None => {
-                match result.rfind('/') {
-                    None => Ok(result),
-                    Some(ix) => Ok(result[ix..].to_string())
-                }
-            }
-            Some(ix) => {
-                Ok(result[ix..].to_string())
-            }
+            None => match result.rfind('/') {
+                None => Ok(result),
+                Some(ix) => Ok(result[ix..].to_string()),
+            },
+            Some(ix) => Ok(result[ix..].to_string()),
         }
+    }
+
+    fn delete_file(&mut self, id: i64) -> Result<usize, Self::Err> {
+        self.enable_foreign_keys()?;
+        self.set_synchronous_full()?;
+
+        let tx = self.conn.transaction()?;
+        let mut stmt = tx.prepare("DELETE FROM file WHERE id = ?1")?;
+        let result = stmt.execute(params![id])?;
+        stmt.finalize()?;
+
+        Self::cleanup_blobs(&tx)?;
+
+        tx.commit()?;
+
+        Ok(result)
     }
 }
 
@@ -216,5 +227,13 @@ impl Sqlite {
 
     fn pragma_update(&self, name: &str, value: &str) -> Result<(), Error> {
         self.conn.pragma_update(None, name, &value)
+    }
+
+    fn cleanup_blobs(tx: &Transaction) -> Result<(), Error> {
+        let mut stmt =
+            tx.prepare("DELETE FROM blob WHERE blake3_hash NOT IN (SELECT blake3_hash FROM file)")?;
+        stmt.execute(params![])?;
+        stmt.finalize()?;
+        Ok(())
     }
 }

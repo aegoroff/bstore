@@ -48,7 +48,8 @@ mod filters {
             .or(delete_bucket(db.clone()))
             .or(get_buckets(db.clone()))
             .or(get_files(db.clone()))
-            .or(get_file_content(db))
+            .or(get_file_content(db.clone()))
+            .or(delete_file(db))
     }
 
     /// POST /api/:string
@@ -92,7 +93,7 @@ mod filters {
             .and_then(handlers::get_files)
     }
 
-    /// GET /api/:string/:i64
+    /// GET /api/file/:i64
     fn get_file_content<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -100,6 +101,16 @@ mod filters {
             .and(warp::get())
             .and(with_db(db))
             .and_then(handlers::get_file_content)
+    }
+
+    /// DELETE /api/file/:i64
+    fn delete_file<P: AsRef<Path> + Clone + Send>(
+        db: P,
+    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+        warp::path!("api" / "file" / i64)
+            .and(warp::delete())
+            .and(with_db(db))
+            .and_then(handlers::delete_file)
     }
 
     fn with_db<P: AsRef<Path> + Clone + Send>(
@@ -252,6 +263,40 @@ mod handlers {
         let reply = FileReply::new(content, name);
 
         Ok(reply)
+    }
+
+    pub async fn delete_file<P: AsRef<Path> + Clone + Send>(
+        id: i64,
+        db: P,
+    ) -> Result<impl warp::Reply, Infallible> {
+        let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("{}", e);
+                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        let delete_result = repository.delete_file(id);
+        let result = match delete_result {
+            Ok(deleted) => {
+                info!(
+                    "file: {} deleted",
+                    id
+                );
+                deleted
+            }
+            Err(e) => {
+                error!("file '{}' not deleted. Error: {}", id, e);
+                0
+            }
+        };
+
+        if result == 0 {
+            Ok(StatusCode::NOT_FOUND)
+        } else {
+            Ok(StatusCode::NO_CONTENT)
+        }
     }
 
     fn success<T: Serialize>(result: T) -> Result<Json, Infallible> {
