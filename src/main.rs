@@ -48,7 +48,7 @@ mod filters {
             .or(delete_bucket(db.clone()))
             .or(get_buckets(db.clone()))
             .or(get_files(db.clone()))
-            .or(get_file(db.clone()))
+            .or(get_file(db))
     }
 
     /// POST /api/:string
@@ -112,6 +112,7 @@ mod filters {
 mod handlers {
     use super::*;
     use bstore::domain::{Bucket, File};
+    use bstore::file_reply::FileReply;
     use futures_util::{pin_mut, StreamExt};
     use serde::Serialize;
     use std::convert::Infallible;
@@ -241,27 +242,18 @@ mod handlers {
         id: i64,
         db: P,
     ) -> Result<impl warp::Reply, Infallible> {
-        // let mut repository = match Sqlite::open(db, Mode::ReadOnly) {
-        //     Ok(s) => s,
-        //     Err(e) => {
-        //         error!("{}", e);
-        //         //return Ok(StatusCode::INTERNAL_SERVER_ERROR);
-        //     }
-        // };
         let mut repository = Sqlite::open(db, Mode::ReadOnly).unwrap();
-        let mut rdr = repository.get_file(id).unwrap();
-        // let mut rdr = match result {
-        //     Ok(r) => r,
-        //     Err(e) => {
-        //         error!("{}", e);
-        //         //return Ok(StatusCode::INTERNAL_SERVER_ERROR);
-        //     }
-        // };
+        let mut rdr = repository.get_file_data(id).unwrap();
 
         let mut content = Vec::<u8>::new();
         rdr.read_to_end(&mut content).unwrap_or_default();
+        std::mem::drop(rdr);
 
-        Ok(content)
+        let name = repository.get_file_name(id).unwrap();
+
+        let reply = FileReply::new(content, name);
+
+        Ok(reply)
     }
 
     fn success<T: Serialize>(result: T) -> Result<Json, Infallible> {

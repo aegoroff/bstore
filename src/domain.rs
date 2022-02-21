@@ -14,7 +14,9 @@ pub trait Storage {
 
     fn get_files(&mut self, bucket: &str) -> Result<Vec<File>, Self::Err>;
 
-    fn get_file(&mut self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err>;
+    fn get_file_data(&mut self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err>;
+
+    fn get_file_name(&mut self, id: i64) -> Result<String, Self::Err>;
 }
 
 #[derive(Serialize, Deserialize)]

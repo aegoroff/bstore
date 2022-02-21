@@ -159,16 +159,37 @@ impl Storage for Sqlite {
         Ok(files.filter(|r| r.is_ok()).map(|r| r.unwrap()).collect())
     }
 
-    fn get_file(&mut self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err> {
+    fn get_file_data(&mut self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err> {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
         let mut stmt = self.conn.prepare("SELECT rowid FROM blob WHERE blake3_hash IN (SELECT blake3_hash FROM file WHERE id = ?1)")?;
-        let rowid : i64 = stmt.query_row([id], |r| Ok(r.get(0)?))?;
+        let rowid : i64 = stmt.query_row([id], |r| r.get(0))?;
         stmt.finalize()?;
 
         let b = self.conn.blob_open(DatabaseName::Main, "blob", "data", rowid, true)?;
         Ok(Box::new(b))
+    }
+
+    fn get_file_name(&mut self, id: i64) -> Result<String, Self::Err> {
+        self.enable_foreign_keys()?;
+        self.set_synchronous_full()?;
+
+        let mut stmt = self.conn.prepare("SELECT path FROM file WHERE id = ?1")?;
+        let result : String = stmt.query_row([id], |r| r.get(0))?;
+        stmt.finalize()?;
+
+        match result.rfind('\\') {
+            None => {
+                match result.rfind('/') {
+                    None => Ok(result),
+                    Some(ix) => Ok(result[ix..].to_string())
+                }
+            }
+            Some(ix) => {
+                Ok(result[ix..].to_string())
+            }
+        }
     }
 }
 
