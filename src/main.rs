@@ -48,7 +48,7 @@ mod filters {
             .or(delete_bucket(db.clone()))
             .or(get_buckets(db.clone()))
             .or(get_files(db.clone()))
-            .or(get_file(db))
+            .or(get_file_content(db))
     }
 
     /// POST /api/:string
@@ -93,13 +93,13 @@ mod filters {
     }
 
     /// GET /api/:string/:i64
-    fn get_file<P: AsRef<Path> + Clone + Send>(
+    fn get_file_content<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
         warp::path!("api" / "file" / i64)
             .and(warp::get())
             .and(with_db(db))
-            .and_then(handlers::get_file)
+            .and_then(handlers::get_file_content)
     }
 
     fn with_db<P: AsRef<Path> + Clone + Send>(
@@ -238,7 +238,7 @@ mod handlers {
         success(result)
     }
 
-    pub async fn get_file<P: AsRef<Path> + Clone + Send>(
+    pub async fn get_file_content<P: AsRef<Path> + Clone + Send>(
         id: i64,
         db: P,
     ) -> Result<impl warp::Reply, Infallible> {
