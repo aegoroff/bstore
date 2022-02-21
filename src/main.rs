@@ -243,13 +243,11 @@ mod handlers {
         db: P,
     ) -> Result<impl warp::Reply, Infallible> {
         let mut repository = Sqlite::open(db, Mode::ReadOnly).unwrap();
-        let mut rdr = repository.get_file_data(id).unwrap();
+        let name = repository.get_file_name(id).unwrap();
 
+        let mut rdr = repository.get_file_data(id).unwrap();
         let mut content = Vec::<u8>::new();
         rdr.read_to_end(&mut content).unwrap_or_default();
-        std::mem::drop(rdr);
-
-        let name = repository.get_file_name(id).unwrap();
 
         let reply = FileReply::new(content, name);
 
