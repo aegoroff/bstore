@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Display};
+use std::io::Read;
 
 pub trait Storage {
     type Err : Debug + Display;
@@ -13,7 +14,7 @@ pub trait Storage {
 
     fn get_files(&mut self, bucket: &str) -> Result<Vec<File>, Self::Err>;
 
-    fn get_file(&mut self, id: i64) -> Result<Vec<u8>, Self::Err>;
+    fn get_file(&mut self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err>;
 }
 
 #[derive(Serialize, Deserialize)]

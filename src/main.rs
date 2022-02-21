@@ -76,7 +76,7 @@ mod filters {
     fn get_buckets<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-        warp::path!("api" )
+        warp::path!("api")
             .and(warp::get())
             .and(with_db(db))
             .and_then(handlers::get_buckets)
@@ -241,30 +241,27 @@ mod handlers {
         id: i64,
         db: P,
     ) -> Result<impl warp::Reply, Infallible> {
-        let mut repository = match Sqlite::open(db, Mode::ReadOnly) {
-            Ok(s) => s,
-            Err(e) => {
-                error!("{}", e);
-                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
-            }
-        };
-        let result = repository.get_file(id);
-        let result = match result {
-            Ok(r) => r,
-            Err(e) => {
-                error!("{}", e);
-                return Ok(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-        };
+        // let mut repository = match Sqlite::open(db, Mode::ReadOnly) {
+        //     Ok(s) => s,
+        //     Err(e) => {
+        //         error!("{}", e);
+        //         //return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+        //     }
+        // };
+        let mut repository = Sqlite::open(db, Mode::ReadOnly).unwrap();
+        let mut rdr = repository.get_file(id).unwrap();
+        // let mut rdr = match result {
+        //     Ok(r) => r,
+        //     Err(e) => {
+        //         error!("{}", e);
+        //         //return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+        //     }
+        // };
 
-        let builder = warp::http::response::Builder::new();
+        let mut content = Vec::<u8>::new();
+        rdr.read_to_end(&mut content).unwrap_or_default();
 
-        let response = builder
-            .header("content-type", "application/octet-stream")
-            .status(200)
-            .body(result).unwrap_or_default();
-
-        Ok(StatusCode::OK)
+        Ok(content)
     }
 
     fn success<T: Serialize>(result: T) -> Result<Json, Infallible> {
