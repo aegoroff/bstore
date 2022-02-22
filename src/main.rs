@@ -280,10 +280,7 @@ mod handlers {
         let delete_result = repository.delete_file(id);
         let result = match delete_result {
             Ok(deleted) => {
-                info!(
-                    "file: {} deleted",
-                    id
-                );
+                info!("file: {} deleted", id);
                 deleted
             }
             Err(e) => {
