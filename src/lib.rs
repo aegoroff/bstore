@@ -1,7 +1,6 @@
 pub mod domain;
-pub mod sqlite;
 pub mod file_reply;
-pub mod reader_stream;
+pub mod sqlite;
 
 #[macro_use]
 extern crate serde;
