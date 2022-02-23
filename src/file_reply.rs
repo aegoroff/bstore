@@ -1,4 +1,7 @@
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use warp::hyper::Body;
+use warp::Stream;
 
 pub struct FileReply {
     data: Vec<u8>,
@@ -23,5 +26,13 @@ impl warp::Reply for FileReply {
             .unwrap_or_default();
 
         response
+    }
+}
+
+impl Stream for FileReply {
+    type Item = std::io::Result<Vec<u8>>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        todo!()
     }
 }
