@@ -44,7 +44,7 @@ mod filters {
     pub fn routes<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-        insert_many(db.clone())
+        insert_bucket(db.clone())
             .or(delete_bucket(db.clone()))
             .or(get_buckets(db.clone()))
             .or(get_files(db.clone()))
@@ -53,7 +53,7 @@ mod filters {
     }
 
     /// POST /api/:string
-    fn insert_many<P: AsRef<Path> + Clone + Send>(
+    fn insert_bucket<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
         warp::path!("api" / String)
