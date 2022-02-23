@@ -5,7 +5,7 @@ use std::path::Path;
 use rusqlite::blob::ZeroBlob;
 use rusqlite::{params, Connection, DatabaseName, Error, OpenFlags, Transaction};
 
-use crate::domain::{Bucket, File, Storage};
+use crate::domain::{Bucket, DeleteResult, File, Storage};
 
 const CACHE_SIZE: &str = "16384";
 
@@ -100,20 +100,23 @@ impl Storage for Sqlite {
         Ok(bytes_written)
     }
 
-    fn delete_bucket(&mut self, bucket: &str) -> Result<usize, Self::Err> {
+    fn delete_bucket(&mut self, bucket: &str) -> Result<DeleteResult, Self::Err> {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
         let tx = self.conn.transaction()?;
         let mut stmt = tx.prepare("DELETE FROM file WHERE bucket = ?1")?;
-        let result = stmt.execute(params![bucket])?;
+        let deleted_files = stmt.execute(params![bucket])?;
         stmt.finalize()?;
 
-        Self::cleanup_blobs(&tx)?;
+        let deleted_blobs = Self::cleanup_blobs(&tx)?;
 
         tx.commit()?;
 
-        Ok(result)
+        Ok(DeleteResult {
+            files: deleted_files,
+            blobs: deleted_blobs,
+        })
     }
 
     fn get_buckets(&mut self) -> Result<Vec<Bucket>, Self::Err> {
@@ -177,31 +180,36 @@ impl Storage for Sqlite {
         let mut stmt = self.conn.prepare("SELECT file.id, file.path, file.bucket, blob.size \
                                                        FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
                                                        WHERE id = ?1")?;
-        let result: File = stmt.query_row([id], |r| Ok(File{
-            id: r.get(0)?,
-            path: r.get(1)?,
-            bucket: r.get(2)?,
-            size: r.get(3)?
-        }))?;
+        let result: File = stmt.query_row([id], |r| {
+            Ok(File {
+                id: r.get(0)?,
+                path: r.get(1)?,
+                bucket: r.get(2)?,
+                size: r.get(3)?,
+            })
+        })?;
         stmt.finalize()?;
 
         Ok(result)
     }
 
-    fn delete_file(&mut self, id: i64) -> Result<usize, Self::Err> {
+    fn delete_file(&mut self, id: i64) -> Result<DeleteResult, Self::Err> {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
         let tx = self.conn.transaction()?;
         let mut stmt = tx.prepare("DELETE FROM file WHERE id = ?1")?;
-        let result = stmt.execute(params![id])?;
+        let deleted_files = stmt.execute(params![id])?;
         stmt.finalize()?;
 
-        Self::cleanup_blobs(&tx)?;
+        let deleted_blobs = Self::cleanup_blobs(&tx)?;
 
         tx.commit()?;
 
-        Ok(result)
+        Ok(DeleteResult {
+            files: deleted_files,
+            blobs: deleted_blobs,
+        })
     }
 }
 
@@ -230,11 +238,11 @@ impl Sqlite {
         self.conn.pragma_update(None, name, &value)
     }
 
-    fn cleanup_blobs(tx: &Transaction) -> Result<(), Error> {
+    fn cleanup_blobs(tx: &Transaction) -> Result<usize, Error> {
         let mut stmt =
             tx.prepare("DELETE FROM blob WHERE blake3_hash NOT IN (SELECT blake3_hash FROM file)")?;
-        stmt.execute(params![])?;
+        let result = stmt.execute(params![])?;
         stmt.finalize()?;
-        Ok(())
+        Ok(result)
     }
 }

@@ -8,7 +8,7 @@ pub trait Storage {
 
     fn insert_file(&mut self, path: &str, bucket: &str, data: Vec<u8>) -> Result<usize, Self::Err>;
 
-    fn delete_bucket(&mut self, bucket: &str) -> Result<usize, Self::Err>;
+    fn delete_bucket(&mut self, bucket: &str) -> Result<DeleteResult, Self::Err>;
 
     fn get_buckets(&mut self) -> Result<Vec<Bucket>, Self::Err>;
 
@@ -18,7 +18,7 @@ pub trait Storage {
 
     fn get_file_info(&mut self, id: i64) -> Result<File, Self::Err>;
 
-    fn delete_file(&mut self, id: i64) -> Result<usize, Self::Err>;
+    fn delete_file(&mut self, id: i64) -> Result<DeleteResult, Self::Err>;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -33,4 +33,15 @@ pub struct File {
     pub path: String,
     pub bucket: String,
     pub size: usize,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct DeleteResult {
+    pub files: usize,
+    pub blobs: usize,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct Error {
+    pub error: String,
 }

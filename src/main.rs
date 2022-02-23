@@ -122,16 +122,15 @@ mod filters {
 
 mod handlers {
     use super::*;
-    use bstore::domain::{Bucket, File};
+    use bstore::domain::{DeleteResult, Error};
     use bstore::file_reply::FileReply;
     use futures_util::{pin_mut, StreamExt};
-    use serde::Serialize;
     use std::convert::Infallible;
     use std::io::Read;
     use warp::http::StatusCode;
     use warp::multipart::FormData;
-    use warp::reply::Json;
-    use warp::Buf;
+    use warp::reply::WithStatus;
+    use warp::{Buf, Reply};
 
     pub async fn insert_many_from_form<P: AsRef<Path> + Clone + Send>(
         bucket: String,
@@ -196,7 +195,11 @@ mod handlers {
             Ok(s) => s,
             Err(e) => {
                 error!("{}", e);
-                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+                let result = Error {
+                    error: format!("{}", e),
+                };
+                let json = warp::reply::json(&result);
+                return with_status(json, StatusCode::INTERNAL_SERVER_ERROR);
             }
         };
 
@@ -204,49 +207,68 @@ mod handlers {
         let result = match delete_result {
             Ok(deleted) => {
                 info!(
-                    "bucket: {} deleted. The number of files removed is {}",
-                    &bucket, deleted
+                    "bucket: {} deleted. The number of files removed {} blobs removed {}",
+                    &bucket, deleted.files, deleted.blobs
                 );
                 deleted
             }
             Err(e) => {
                 error!("bucket '{}' not deleted. Error: {}", &bucket, e);
-                0
+                DeleteResult::default()
             }
         };
 
-        if result == 0 {
-            Ok(StatusCode::NOT_FOUND)
+        let status = if result.files == 0 {
+            StatusCode::NOT_FOUND
         } else {
-            Ok(StatusCode::NO_CONTENT)
-        }
+            StatusCode::OK
+        };
+        let json = warp::reply::json(&result);
+        with_status(json, status)
     }
 
-    pub async fn get_buckets<P: AsRef<Path> + Clone + Send>(db: P) -> Result<Json, Infallible> {
+    pub async fn get_buckets<P: AsRef<Path> + Clone + Send>(
+        db: P,
+    ) -> Result<impl warp::Reply, Infallible> {
         let mut repository = match Sqlite::open(db, Mode::ReadOnly) {
             Ok(s) => s,
             Err(e) => {
                 error!("{}", e);
-                return success(Vec::<Bucket>::new());
+                let result = Error {
+                    error: format!("{}", e),
+                };
+                let json = warp::reply::json(&result);
+                return with_status(json, StatusCode::INTERNAL_SERVER_ERROR);
             }
         };
         let result = repository.get_buckets().unwrap_or_default();
-        success(result)
+        let json = warp::reply::json(&result);
+        with_status(json, StatusCode::OK)
     }
 
     pub async fn get_files<P: AsRef<Path> + Clone + Send>(
         bucket: String,
         db: P,
-    ) -> Result<Json, Infallible> {
+    ) -> Result<impl warp::Reply, Infallible> {
         let mut repository = match Sqlite::open(db, Mode::ReadOnly) {
             Ok(s) => s,
             Err(e) => {
                 error!("{}", e);
-                return success(Vec::<File>::new());
+                let result = Error {
+                    error: format!("{}", e),
+                };
+                let json = warp::reply::json(&result);
+                return with_status(json, StatusCode::INTERNAL_SERVER_ERROR);
             }
         };
         let result = repository.get_files(&bucket).unwrap_or_default();
-        success(result)
+        let json = warp::reply::json(&result);
+        let status = if result.is_empty() {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::OK
+        };
+        with_status(json, status)
     }
 
     pub async fn get_file_content<P: AsRef<Path> + Clone + Send>(
@@ -260,7 +282,7 @@ mod handlers {
 
         // NOTE: Find way to pass raw Read to stream
         let mut content = Vec::<u8>::with_capacity(info.size);
-        let size= rdr.read_to_end(&mut content).unwrap_or_default();
+        let size = rdr.read_to_end(&mut content).unwrap_or_default();
         info!("File size {}", size);
 
         Ok(FileReply::new(content, info))
@@ -274,30 +296,41 @@ mod handlers {
             Ok(s) => s,
             Err(e) => {
                 error!("{}", e);
-                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+                let result = Error {
+                    error: format!("{}", e),
+                };
+                let json = warp::reply::json(&result);
+                return with_status(json, StatusCode::INTERNAL_SERVER_ERROR);
             }
         };
 
         let delete_result = repository.delete_file(id);
         let result = match delete_result {
             Ok(deleted) => {
-                info!("file: {} deleted", id);
+                if deleted.files > 0 {
+                    info!("file: {} deleted", id);
+                } else {
+                    info!("file: {} not exist", id);
+                }
+
                 deleted
             }
             Err(e) => {
                 error!("file '{}' not deleted. Error: {}", id, e);
-                0
+                DeleteResult::default()
             }
         };
 
-        if result == 0 {
-            Ok(StatusCode::NOT_FOUND)
+        let status = if result.files == 0 {
+            StatusCode::NOT_FOUND
         } else {
-            Ok(StatusCode::NO_CONTENT)
-        }
+            StatusCode::OK
+        };
+        let json = warp::reply::json(&result);
+        with_status(json, status)
     }
 
-    fn success<T: Serialize>(result: T) -> Result<Json, Infallible> {
-        Ok(warp::reply::json(&result))
+    fn with_status<R: Reply>(result: R, status: StatusCode) -> Result<WithStatus<R>, Infallible> {
+        Ok(warp::reply::with_status(result, status))
     }
 }
