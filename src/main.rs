@@ -132,6 +132,7 @@ mod handlers {
     use warp::multipart::FormData;
     use warp::reply::Json;
     use warp::Buf;
+    use bstore::reader_stream::ReaderStream;
 
     pub async fn insert_many_from_form<P: AsRef<Path> + Clone + Send>(
         bucket: String,
@@ -256,11 +257,10 @@ mod handlers {
         let mut repository = Sqlite::open(db, Mode::ReadOnly).unwrap();
         let name = repository.get_file_name(id).unwrap();
 
-        let mut rdr = repository.get_file_data(id).unwrap();
-        let mut content = Vec::<u8>::new();
-        rdr.read_to_end(&mut content).unwrap_or_default();
+        let rdr = repository.get_file_data(id).unwrap();
+        let stream= ReaderStream::new(rdr);
 
-        let reply = FileReply::new(content, name);
+        let reply = FileReply::new(stream, name);
 
         Ok(reply)
     }

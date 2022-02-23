@@ -1,16 +1,14 @@
-use std::pin::Pin;
-use std::task::{Context, Poll};
 use warp::hyper::Body;
-use warp::Stream;
+use crate::reader_stream::ReaderStream;
 
 pub struct FileReply {
-    data: Vec<u8>,
+    stream: ReaderStream,
     name: String,
 }
 
 impl FileReply {
-    pub fn new(data: Vec<u8>, name: String) -> Self {
-        Self { data, name }
+    pub fn new(stream: ReaderStream, name: String) -> Self {
+        Self { stream, name }
     }
 }
 
@@ -22,17 +20,9 @@ impl warp::Reply for FileReply {
                 "content-disposition",
                 format!("attachment; filename=\"{}\"", self.name),
             )
-            .body(Body::from(self.data))
+            .body(Body::wrap_stream(self.stream))
             .unwrap_or_default();
 
         response
-    }
-}
-
-impl Stream for FileReply {
-    type Item = std::io::Result<Vec<u8>>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        todo!()
     }
 }

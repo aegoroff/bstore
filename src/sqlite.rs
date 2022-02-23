@@ -156,7 +156,7 @@ impl Storage for Sqlite {
         Ok(files.filter(|r| r.is_ok()).map(|r| r.unwrap()).collect())
     }
 
-    fn get_file_data(&mut self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err> {
+    fn get_file_data(&self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err> {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
