@@ -16,7 +16,7 @@ pub trait Storage {
 
     fn get_file_data(&self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err>;
 
-    fn get_file_name(&mut self, id: i64) -> Result<String, Self::Err>;
+    fn get_file_info(&mut self, id: i64) -> Result<File, Self::Err>;
 
     fn delete_file(&mut self, id: i64) -> Result<usize, Self::Err>;
 }

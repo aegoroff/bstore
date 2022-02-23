@@ -170,21 +170,22 @@ impl Storage for Sqlite {
         Ok(Box::new(b))
     }
 
-    fn get_file_name(&mut self, id: i64) -> Result<String, Self::Err> {
+    fn get_file_info(&mut self, id: i64) -> Result<File, Self::Err> {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
-        let mut stmt = self.conn.prepare("SELECT path FROM file WHERE id = ?1")?;
-        let result: String = stmt.query_row([id], |r| r.get(0))?;
+        let mut stmt = self.conn.prepare("SELECT file.id, file.path, file.bucket, blob.size \
+                                                       FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
+                                                       WHERE id = ?1")?;
+        let result: File = stmt.query_row([id], |r| Ok(File{
+            id: r.get(0)?,
+            path: r.get(1)?,
+            bucket: r.get(2)?,
+            size: r.get(3)?
+        }))?;
         stmt.finalize()?;
 
-        match result.rfind('\\') {
-            None => match result.rfind('/') {
-                None => Ok(result),
-                Some(ix) => Ok(result[ix..].to_string()),
-            },
-            Some(ix) => Ok(result[ix..].to_string()),
-        }
+        Ok(result)
     }
 
     fn delete_file(&mut self, id: i64) -> Result<usize, Self::Err> {

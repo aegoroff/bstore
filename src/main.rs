@@ -254,15 +254,16 @@ mod handlers {
         db: P,
     ) -> Result<impl warp::Reply, Infallible> {
         let mut repository = Sqlite::open(db, Mode::ReadOnly).unwrap();
-        let name = repository.get_file_name(id).unwrap();
+        let info = repository.get_file_info(id).unwrap();
 
         let mut rdr = repository.get_file_data(id).unwrap();
 
-        // TODO: Find way to pass raw Read to stream
-        let mut content = Vec::<u8>::new();
-        rdr.read_to_end(&mut content).unwrap_or_default();
+        // NOTE: Find way to pass raw Read to stream
+        let mut content = Vec::<u8>::with_capacity(info.size);
+        let size= rdr.read_to_end(&mut content).unwrap_or_default();
+        info!("File size {}", size);
 
-        Ok(FileReply::new(content, name))
+        Ok(FileReply::new(content, info))
     }
 
     pub async fn delete_file<P: AsRef<Path> + Clone + Send>(
