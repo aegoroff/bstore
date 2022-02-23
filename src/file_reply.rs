@@ -16,9 +16,9 @@ impl FileReply {
         match path.rfind('\\') {
             None => match path.rfind('/') {
                 None => path,
-                Some(ix) => &path[ix..],
+                Some(ix) => &path[ix+1..],
             },
-            Some(ix) => &path[ix..],
+            Some(ix) => &path[ix+1..],
         }
     }
 }
