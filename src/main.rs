@@ -49,7 +49,8 @@ mod filters {
             .or(get_buckets(db.clone()))
             .or(get_files(db.clone()))
             .or(get_file_content(db.clone()))
-            .or(delete_file(db))
+            .or(delete_file(db.clone()))
+            .or(insert_file(db))
     }
 
     /// POST /api/:string
@@ -61,6 +62,17 @@ mod filters {
             .and(with_db(db))
             .and(warp::filters::multipart::form().max_length(2 * 1024 * 1024 * 1024))
             .and_then(handlers::insert_many_from_form)
+    }
+
+    /// POST /api/:string/:string
+    fn insert_file<P: AsRef<Path> + Clone + Send>(
+        db: P,
+    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+        warp::path!("api" / String / String)
+            .and(warp::post())
+            .and(with_db(db))
+            .and(warp::body::stream())
+            .and_then(handlers::insert_single_file)
     }
 
     /// DELETE /api/:string
@@ -130,7 +142,7 @@ mod handlers {
     use warp::http::StatusCode;
     use warp::multipart::FormData;
     use warp::reply::WithStatus;
-    use warp::{Buf, Reply};
+    use warp::{Buf, Reply, Stream};
 
     pub async fn insert_many_from_form<P: AsRef<Path> + Clone + Send>(
         bucket: String,
@@ -184,6 +196,54 @@ mod handlers {
             }
         }
 
+        Ok(StatusCode::CREATED)
+    }
+
+    pub async fn insert_single_file<S, B, P>(
+        bucket: String,
+        file_name: String,
+        db: P,
+        stream: S,
+    ) -> Result<impl warp::Reply, Infallible>
+    where
+        S: Stream<Item = Result<B, warp::Error>>,
+        S: StreamExt,
+        B: warp::Buf,
+        P: AsRef<Path> + Clone + Send,
+    {
+        let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("{}", e);
+                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        pin_mut!(stream);
+
+        let mut result = Vec::new();
+        let mut read_bytes = 0usize;
+        while let Some(value) = stream.next().await {
+            if let Ok(buf) = value {
+                let mut rdr = buf.reader();
+                let mut buffer = Vec::new();
+                read_bytes += rdr.read_to_end(&mut buffer).unwrap_or_default();
+                result.append(&mut buffer);
+            }
+        }
+
+        let insert_result = repository.insert_file(&file_name, &bucket, result);
+        match insert_result {
+            Ok(written) => {
+                info!(
+                    "file: {} read: {} written: {}",
+                    &file_name, read_bytes, written
+                );
+            }
+            Err(e) => {
+                error!("file '{}' not inserted. Error: {}", &file_name, e);
+            }
+        }
         Ok(StatusCode::CREATED)
     }
 
