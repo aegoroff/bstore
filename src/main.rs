@@ -142,7 +142,7 @@ mod handlers {
     use warp::http::StatusCode;
     use warp::multipart::FormData;
     use warp::reply::WithStatus;
-    use warp::{Buf, Reply, Stream};
+    use warp::{Reply, Stream};
 
     pub async fn insert_many_from_form<P: AsRef<Path> + Clone + Send>(
         bucket: String,
@@ -166,17 +166,7 @@ mod handlers {
                 Ok(part) => {
                     let file_name = part.filename().unwrap_or_default().to_string();
                     let stream = part.stream();
-                    pin_mut!(stream);
-                    let mut result = Vec::new();
-                    let mut read_bytes = 0usize;
-                    while let Some(value) = stream.next().await {
-                        if let Ok(buf) = value {
-                            let mut rdr = buf.reader();
-                            let mut buffer = Vec::new();
-                            read_bytes += rdr.read_to_end(&mut buffer).unwrap_or_default();
-                            result.append(&mut buffer);
-                        }
-                    }
+                    let (result, read_bytes) = read_from_stream(stream).await;
                     let insert_result = repository.insert_file(&file_name, &bucket, result);
                     match insert_result {
                         Ok(written) => {
@@ -219,18 +209,7 @@ mod handlers {
             }
         };
 
-        pin_mut!(stream);
-
-        let mut result = Vec::new();
-        let mut read_bytes = 0usize;
-        while let Some(value) = stream.next().await {
-            if let Ok(buf) = value {
-                let mut rdr = buf.reader();
-                let mut buffer = Vec::new();
-                read_bytes += rdr.read_to_end(&mut buffer).unwrap_or_default();
-                result.append(&mut buffer);
-            }
-        }
+        let (result, read_bytes) = read_from_stream(stream).await;
 
         let insert_result = repository.insert_file(&file_name, &bucket, result);
         match insert_result {
@@ -245,6 +224,26 @@ mod handlers {
             }
         }
         Ok(StatusCode::CREATED)
+    }
+
+    async fn read_from_stream<S, B>(stream: S) -> (Vec<u8>, usize)
+    where
+        S: Stream<Item = Result<B, warp::Error>>,
+        S: StreamExt,
+        B: warp::Buf,
+    {
+        pin_mut!(stream);
+        let mut result = Vec::new();
+        let mut read_bytes = 0usize;
+        while let Some(value) = stream.next().await {
+            if let Ok(buf) = value {
+                let mut rdr = buf.reader();
+                let mut buffer = Vec::new();
+                read_bytes += rdr.read_to_end(&mut buffer).unwrap_or_default();
+                result.append(&mut buffer);
+            }
+        }
+        (result, read_bytes)
     }
 
     pub async fn delete_bucket<P: AsRef<Path> + Clone + Send>(
