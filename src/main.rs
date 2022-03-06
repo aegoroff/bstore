@@ -50,7 +50,8 @@ mod filters {
             .or(get_files(db.clone()))
             .or(get_file_content(db.clone()))
             .or(delete_file(db.clone()))
-            .or(insert_file(db))
+            .or(insert_file(db.clone()))
+            .or(insert_zipped_bucket(db))
     }
 
     /// POST /api/:string
@@ -73,6 +74,17 @@ mod filters {
             .and(with_db(db))
             .and(warp::body::stream())
             .and_then(handlers::insert_single_file)
+    }
+
+    /// POST /api/:string/zip
+    fn insert_zipped_bucket<P: AsRef<Path> + Clone + Send>(
+        db: P,
+    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+        warp::path!("api" / String / "zip" )
+            .and(warp::post())
+            .and(with_db(db))
+            .and(warp::body::stream())
+            .and_then(handlers::insert_zipped_bucket)
     }
 
     /// DELETE /api/:string
@@ -223,6 +235,31 @@ mod handlers {
                 error!("file '{}' not inserted. Error: {}", &file_name, e);
             }
         }
+        Ok(StatusCode::CREATED)
+    }
+
+    pub async fn insert_zipped_bucket<S, B, P>(
+        bucket: String,
+        db: P,
+        stream: S,
+    ) -> Result<impl warp::Reply, Infallible>
+    where
+        S: Stream<Item = Result<B, warp::Error>>,
+        S: StreamExt,
+        B: warp::Buf,
+        P: AsRef<Path> + Clone + Send,
+    {
+        let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("{}", e);
+                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
+
+        let (result, read_bytes) = read_from_stream(stream).await;
+
+        // TODO: Implement unzip and create bucket
         Ok(StatusCode::CREATED)
     }
 
