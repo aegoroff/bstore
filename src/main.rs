@@ -80,7 +80,7 @@ mod filters {
     fn insert_zipped_bucket<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-        warp::path!("api" / String / "zip" )
+        warp::path!("api" / String / "zip")
             .and(warp::post())
             .and(with_db(db))
             .and(warp::body::stream())
@@ -150,6 +150,7 @@ mod handlers {
     use bstore::file_reply::FileReply;
     use futures_util::{pin_mut, StreamExt};
     use std::convert::Infallible;
+    use std::io::Cursor;
     use std::io::Read;
     use warp::http::StatusCode;
     use warp::multipart::FormData;
@@ -257,9 +258,43 @@ mod handlers {
             }
         };
 
-        let (result, read_bytes) = read_from_stream(stream).await;
+        let (result, _) = read_from_stream(stream).await;
+        let buff = Cursor::new(result);
 
-        // TODO: Implement unzip and create bucket
+        let zip_result = zip::ZipArchive::new(buff);
+
+        match zip_result {
+            Ok(mut archive) => {
+                for i in 0..archive.len() {
+                    if let Ok(mut zip_file) = archive.by_index(i) {
+                        let outpath = match zip_file.enclosed_name() {
+                            Some(path) => path.to_owned(),
+                            None => continue,
+                        };
+                        let outpath = outpath.to_str().unwrap_or_default();
+
+                        let mut writer: Vec<u8> = vec![];
+                        let r = std::io::copy(&mut zip_file, &mut writer);
+                        if let Ok(r) = r {
+                            let insert_result = repository.insert_file(outpath, &bucket, writer);
+                            match insert_result {
+                                Ok(written) => {
+                                    info!("file: {} read: {} written: {}", outpath, r, written);
+                                }
+                                Err(e) => {
+                                    error!("file '{}' not inserted. Error: {}", outpath, e);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                error!("{}", e);
+                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        }
+
         Ok(StatusCode::CREATED)
     }
 
