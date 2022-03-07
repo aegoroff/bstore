@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 use rusqlite::blob::ZeroBlob;
-use rusqlite::{params, Connection, DatabaseName, Error, OpenFlags, Transaction};
+use rusqlite::{params, Connection, DatabaseName, Error, ErrorCode, OpenFlags, Transaction};
 
 use crate::domain::{Bucket, DeleteResult, File, Storage};
 
@@ -60,42 +60,62 @@ impl Storage for Sqlite {
         let hash = blake3::hash(&data);
         let hash = hash.to_string();
 
-        let tx = self.conn.transaction()?;
-
-        let mut stmt = tx.prepare("SELECT blake3_hash FROM blob WHERE blake3_hash = ?1")?;
-
-        let exists = stmt.exists(params![&hash])?;
-        stmt.finalize()?;
-
         let mut bytes_written = 0;
-        if !exists {
-            let len = data.len() as i32;
-            tx.execute(
-                "INSERT INTO blob (blake3_hash, data, size) VALUES (?1, ?2, ?3)",
-                params![&hash, &ZeroBlob(len), len],
-            )?;
+        let mut not_executed = true;
+        while not_executed {
+            let tx = self.conn.transaction()?;
 
-            let rowid = tx.last_insert_rowid();
+            let mut stmt = tx.prepare("SELECT blake3_hash FROM blob WHERE blake3_hash = ?1")?;
 
-            let mut blob = tx.blob_open(DatabaseName::Main, "blob", "data", rowid, false)?;
-            bytes_written = data.len();
-            match blob.write_all(&data) {
-                Ok(_) => {}
-                Err(e) => {
-                    error!("{}", e);
+            let exists = stmt.exists(params![&hash])?;
+            stmt.finalize()?;
+
+            if !exists {
+                let len = data.len() as i32;
+                tx.execute(
+                    "INSERT INTO blob (blake3_hash, data, size) VALUES (?1, ?2, ?3)",
+                    params![&hash, &ZeroBlob(len), len],
+                )?;
+
+                let rowid = tx.last_insert_rowid();
+
+                let mut blob = tx.blob_open(DatabaseName::Main, "blob", "data", rowid, false)?;
+                bytes_written = data.len();
+                match blob.write_all(&data) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!("{}", e);
+                    }
                 }
+                blob.flush().unwrap_or_default();
+                blob.close()?;
             }
-            blob.flush().unwrap_or_default();
-            blob.close()?;
-        }
 
-        tx.prepare_cached(
-            "INSERT INTO file (blake3_hash, path, bucket)
+            let result = tx
+                .prepare_cached(
+                    "INSERT INTO file (blake3_hash, path, bucket)
                  VALUES (?1, ?2, ?3)",
-        )?
-        .execute(params![&hash, path, bucket])?;
+                )?
+                .execute(params![&hash, path, bucket]);
 
-        tx.commit()?;
+            match result {
+                Ok(_) => not_executed = false,
+                Err(err) => match err {
+                    Error::SqliteFailure(e, _) => {
+                        if e.code == ErrorCode::DatabaseBusy {
+                            not_executed = true
+                        } else {
+                            return Err(err);
+                        }
+                    }
+                    _ => {
+                        return Err(err);
+                    }
+                },
+            }
+
+            tx.commit()?;
+        }
 
         Ok(bytes_written)
     }
