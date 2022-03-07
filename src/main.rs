@@ -50,8 +50,7 @@ mod filters {
             .or(get_files(db.clone()))
             .or(get_file_content(db.clone()))
             .or(delete_file(db.clone()))
-            .or(insert_file(db.clone()))
-            .or(insert_zipped_bucket(db))
+            .or(insert_file(db))
     }
 
     /// POST /api/:string
@@ -73,18 +72,7 @@ mod filters {
             .and(warp::post())
             .and(with_db(db))
             .and(warp::body::stream())
-            .and_then(handlers::insert_single_file)
-    }
-
-    /// POST /api/:string/zip
-    fn insert_zipped_bucket<P: AsRef<Path> + Clone + Send>(
-        db: P,
-    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-        warp::path!("api" / String / "zip")
-            .and(warp::post())
-            .and(with_db(db))
-            .and(warp::body::stream())
-            .and_then(handlers::insert_zipped_bucket)
+            .and_then(handlers::insert_file_or_zipped_bucket)
     }
 
     /// DELETE /api/:string
@@ -202,7 +190,7 @@ mod handlers {
         Ok(StatusCode::CREATED)
     }
 
-    pub async fn insert_single_file<S, B, P>(
+    pub async fn insert_file_or_zipped_bucket<S, B, P>(
         bucket: String,
         file_name: String,
         db: P,
@@ -224,77 +212,66 @@ mod handlers {
 
         let (result, read_bytes) = read_from_stream(stream).await;
 
-        let insert_result = repository.insert_file(&file_name, &bucket, result);
-        match insert_result {
-            Ok(written) => {
-                info!(
-                    "file: {} read: {} written: {}",
-                    &file_name, read_bytes, written
-                );
+        if file_name != "zip" {
+            let insert_result = repository.insert_file(&file_name, &bucket, result);
+            match insert_result {
+                Ok(written) => {
+                    info!(
+                        "file: {} read: {} written: {}",
+                        &file_name, read_bytes, written
+                    );
+                }
+                Err(e) => {
+                    error!("file '{}' not inserted. Error: {}", &file_name, e);
+                }
             }
-            Err(e) => {
-                error!("file '{}' not inserted. Error: {}", &file_name, e);
-            }
-        }
-        Ok(StatusCode::CREATED)
-    }
+        } else {
+            info!("Start insert zipped bucket");
+            let buff = Cursor::new(result);
 
-    pub async fn insert_zipped_bucket<S, B, P>(
-        bucket: String,
-        db: P,
-        stream: S,
-    ) -> Result<impl warp::Reply, Infallible>
-    where
-        S: Stream<Item = Result<B, warp::Error>>,
-        S: StreamExt,
-        B: warp::Buf,
-        P: AsRef<Path> + Clone + Send,
-    {
-        let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
-            Ok(s) => s,
-            Err(e) => {
-                error!("{}", e);
-                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
-            }
-        };
+            let zip_result = zip::ZipArchive::new(buff);
 
-        let (result, _) = read_from_stream(stream).await;
-        let buff = Cursor::new(result);
+            match zip_result {
+                Ok(mut archive) => {
+                    for i in 0..archive.len() {
+                        match archive.by_index(i) {
+                            Ok(mut zip_file) => {
+                                let outpath = match zip_file.enclosed_name() {
+                                    Some(path) => path.to_owned(),
+                                    None => continue,
+                                };
+                                let outpath = outpath.to_str().unwrap_or_default();
 
-        let zip_result = zip::ZipArchive::new(buff);
-
-        match zip_result {
-            Ok(mut archive) => {
-                for i in 0..archive.len() {
-                    if let Ok(mut zip_file) = archive.by_index(i) {
-                        let outpath = match zip_file.enclosed_name() {
-                            Some(path) => path.to_owned(),
-                            None => continue,
-                        };
-                        let outpath = outpath.to_str().unwrap_or_default();
-
-                        let mut writer: Vec<u8> = vec![];
-                        let r = std::io::copy(&mut zip_file, &mut writer);
-                        if let Ok(r) = r {
-                            let insert_result = repository.insert_file(outpath, &bucket, writer);
-                            match insert_result {
-                                Ok(written) => {
-                                    info!("file: {} read: {} written: {}", outpath, r, written);
+                                let mut writer: Vec<u8> = vec![];
+                                let r = std::io::copy(&mut zip_file, &mut writer);
+                                if let Ok(r) = r {
+                                    let insert_result =
+                                        repository.insert_file(outpath, &bucket, writer);
+                                    match insert_result {
+                                        Ok(written) => {
+                                            info!(
+                                                "file: {} read: {} written: {}",
+                                                outpath, r, written
+                                            );
+                                        }
+                                        Err(e) => {
+                                            error!("file '{}' not inserted. Error: {}", outpath, e);
+                                        }
+                                    }
                                 }
-                                Err(e) => {
-                                    error!("file '{}' not inserted. Error: {}", outpath, e);
-                                }
+                            }
+                            Err(e) => {
+                                error!("file not extracted. Error: {:#?}", e);
                             }
                         }
                     }
                 }
-            }
-            Err(e) => {
-                error!("{}", e);
-                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+                Err(e) => {
+                    error!("{:#?}", e);
+                    return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+                }
             }
         }
-
         Ok(StatusCode::CREATED)
     }
 
