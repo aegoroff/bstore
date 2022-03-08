@@ -60,9 +60,8 @@ impl Storage for Sqlite {
         let hash = blake3::hash(&data);
         let hash = hash.to_string();
 
-        let mut bytes_written = 0;
-        let mut not_executed = true;
-        while not_executed {
+        Sqlite::execute_with_retry(|| {
+            let mut bytes_written = 0;
             let tx = self.conn.transaction()?;
 
             let mut stmt = tx.prepare("SELECT blake3_hash FROM blob WHERE blake3_hash = ?1")?;
@@ -91,51 +90,36 @@ impl Storage for Sqlite {
                 blob.close()?;
             }
 
-            let result = tx
-                .prepare_cached(
-                    "INSERT INTO file (blake3_hash, path, bucket)
+            tx.prepare_cached(
+                "INSERT INTO file (blake3_hash, path, bucket)
                  VALUES (?1, ?2, ?3)",
-                )?
-                .execute(params![&hash, path, bucket]);
-
-            match result {
-                Ok(_) => not_executed = false,
-                Err(err) => match err {
-                    Error::SqliteFailure(e, _) => {
-                        if e.code == ErrorCode::DatabaseBusy {
-                            not_executed = true
-                        } else {
-                            return Err(err);
-                        }
-                    }
-                    _ => {
-                        return Err(err);
-                    }
-                },
-            }
+            )?
+            .execute(params![&hash, path, bucket])?;
 
             tx.commit()?;
-        }
 
-        Ok(bytes_written)
+            Ok(bytes_written)
+        })
     }
 
     fn delete_bucket(&mut self, bucket: &str) -> Result<DeleteResult, Self::Err> {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
-        let tx = self.conn.transaction()?;
-        let mut stmt = tx.prepare("DELETE FROM file WHERE bucket = ?1")?;
-        let deleted_files = stmt.execute(params![bucket])?;
-        stmt.finalize()?;
+        Sqlite::execute_with_retry(|| {
+            let tx = self.conn.transaction()?;
+            let mut stmt = tx.prepare("DELETE FROM file WHERE bucket = ?1")?;
+            let deleted_files = stmt.execute(params![bucket])?;
+            stmt.finalize()?;
 
-        let deleted_blobs = Self::cleanup_blobs(&tx)?;
+            let deleted_blobs = Self::cleanup_blobs(&tx)?;
 
-        tx.commit()?;
+            tx.commit()?;
 
-        Ok(DeleteResult {
-            files: deleted_files,
-            blobs: deleted_blobs,
+            Ok(DeleteResult {
+                files: deleted_files,
+                blobs: deleted_blobs,
+            })
         })
     }
 
@@ -217,18 +201,20 @@ impl Storage for Sqlite {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
-        let tx = self.conn.transaction()?;
-        let mut stmt = tx.prepare("DELETE FROM file WHERE id = ?1")?;
-        let deleted_files = stmt.execute(params![id])?;
-        stmt.finalize()?;
+        Sqlite::execute_with_retry(|| {
+            let tx = self.conn.transaction()?;
+            let mut stmt = tx.prepare("DELETE FROM file WHERE id = ?1")?;
+            let deleted_files = stmt.execute(params![id])?;
+            stmt.finalize()?;
 
-        let deleted_blobs = Self::cleanup_blobs(&tx)?;
+            let deleted_blobs = Self::cleanup_blobs(&tx)?;
 
-        tx.commit()?;
+            tx.commit()?;
 
-        Ok(DeleteResult {
-            files: deleted_files,
-            blobs: deleted_blobs,
+            Ok(DeleteResult {
+                files: deleted_files,
+                blobs: deleted_blobs,
+            })
         })
     }
 }
@@ -264,5 +250,29 @@ impl Sqlite {
         let result = stmt.execute(params![])?;
         stmt.finalize()?;
         Ok(result)
+    }
+
+    fn execute_with_retry<T, F>(mut action: F) -> Result<T, Error>
+    where
+        F: FnMut() -> Result<T, Error>,
+    {
+        loop {
+            let result = action();
+            match result {
+                Ok(_) => return result,
+                Err(err) => match err {
+                    Error::SqliteFailure(e, _) => {
+                        if e.code == ErrorCode::DatabaseBusy {
+                            continue;
+                        } else {
+                            return Err(err);
+                        }
+                    }
+                    _ => {
+                        return Err(err);
+                    }
+                },
+            }
+        }
     }
 }
