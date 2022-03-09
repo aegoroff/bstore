@@ -177,7 +177,10 @@ mod handlers {
                             );
                         }
                         Err(e) => {
-                            error!("bucket '{}' file '{}' not inserted. Error: {:#?}", bucket, &file_name, e);
+                            error!(
+                                "bucket '{}' file '{}' not inserted. Error: {:#?}",
+                                bucket, &file_name, e
+                            );
                         }
                     }
                 }
