@@ -252,6 +252,8 @@ impl Sqlite {
         Ok(result)
     }
 
+    /// Ignores ErrorCode::DatabaseBusy and retry query if so
+    /// Only needed in case of changing queries not reading ones
     fn execute_with_retry<T, F>(mut action: F) -> Result<T, Error>
     where
         F: FnMut() -> Result<T, Error>,
