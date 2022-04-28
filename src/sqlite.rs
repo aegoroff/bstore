@@ -260,20 +260,18 @@ impl Sqlite {
     {
         loop {
             let result = action();
-            match result {
-                Ok(_) => return result,
-                Err(err) => match err {
-                    Error::SqliteFailure(e, _) => {
-                        if e.code == ErrorCode::DatabaseBusy {
-                            continue;
-                        } else {
-                            return Err(err);
-                        }
-                    }
-                    _ => {
+            if let Err(err) = result {
+                if let Error::SqliteFailure(e, _) = err {
+                    if e.code == ErrorCode::DatabaseBusy {
+                        continue;
+                    } else {
                         return Err(err);
                     }
-                },
+                } else {
+                    return Err(err);
+                }
+            } else {
+                return result;
             }
         }
     }
