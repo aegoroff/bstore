@@ -1,5 +1,5 @@
-use warp::hyper::Body;
 use crate::domain::File;
+use warp::hyper::Body;
 
 pub struct FileReply {
     data: Vec<u8>,
@@ -13,12 +13,12 @@ impl FileReply {
 
     fn name_from_path(&self) -> &str {
         let path = &self.file.path;
-        match path.rfind('\\') {
-            None => match path.rfind('/') {
-                None => path,
-                Some(ix) => &path[ix+1..],
-            },
-            Some(ix) => &path[ix+1..],
+        if let Some(ix) = path.rfind('\\') {
+            &path[ix + 1..]
+        } else if let Some(ix) = path.rfind('/') {
+            &path[ix + 1..]
+        } else {
+            path
         }
     }
 }
@@ -30,10 +30,8 @@ impl warp::Reply for FileReply {
             .header(
                 "content-disposition",
                 format!("attachment; filename=\"{}\"", self.name_from_path()),
-            ).header(
-                "Content-Length",
-                self.file.size,
             )
+            .header("Content-Length", self.file.size)
             .body(Body::from(self.data))
             .unwrap_or_default()
     }
