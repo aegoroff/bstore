@@ -36,3 +36,34 @@ impl warp::Reply for FileReply {
             .unwrap_or_default()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
+
+    #[rstest]
+    #[case("", "")]
+    #[case("file.ext", "file.ext")]
+    #[case("dir/file.ext", "file.ext")]
+    #[case("dir\\file.ext", "file.ext")]
+    #[case("dir1\\dir2\\file.ext", "file.ext")]
+    #[case("dir1/dir2/file.ext", "file.ext")]
+    #[trace]
+    fn name_from_path(#[case] path: &str, #[case] expected: &str) {
+        // Arrange
+        let file = File {
+            id: 1,
+            path: path.to_owned(),
+            bucket: String::new(),
+            size: 1,
+        };
+        let reply = FileReply::new(Vec::new(), file);
+
+        // Act
+        let name = reply.name_from_path();
+
+        // Assert
+        assert_eq!(name, expected);
+    }
+}
