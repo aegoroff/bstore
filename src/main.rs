@@ -54,6 +54,7 @@ mod filters {
     }
 
     /// POST /api/:string
+    /// Creates bucket using many files from form
     fn insert_bucket<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -65,6 +66,7 @@ mod filters {
     }
 
     /// POST /api/:string/:string
+    /// Adds single file into a bucket
     fn insert_file<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -76,6 +78,7 @@ mod filters {
     }
 
     /// DELETE /api/:string
+    /// Deletes bucket
     fn delete_bucket<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -86,6 +89,7 @@ mod filters {
     }
 
     /// GET /api/
+    /// Gets all buckets list
     fn get_buckets<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -96,6 +100,7 @@ mod filters {
     }
 
     /// GET /api/:string
+    /// Gets all bucket files
     fn get_files<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -106,6 +111,7 @@ mod filters {
     }
 
     /// GET /api/file/:i64
+    /// Gets file content
     fn get_file_content<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -116,6 +122,7 @@ mod filters {
     }
 
     /// DELETE /api/file/:i64
+    /// Deletes file
     fn delete_file<P: AsRef<Path> + Clone + Send>(
         db: P,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
