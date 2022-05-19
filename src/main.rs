@@ -223,6 +223,7 @@ mod handlers {
         let (result, read_bytes) = read_from_stream(stream).await;
 
         if file_name != "zip" {
+            // Plain file branch
             let insert_result = repository.insert_file(&file_name, &bucket, result);
             match insert_result {
                 Ok(written) => {
@@ -236,6 +237,7 @@ mod handlers {
                 }
             }
         } else {
+            // Zip archieve branch
             info!("Start insert zipped bucket");
             let buff = Cursor::new(result);
 
