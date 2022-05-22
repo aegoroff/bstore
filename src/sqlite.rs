@@ -70,6 +70,9 @@ impl Storage for Sqlite {
             stmt.finalize()?;
 
             if !exists {
+                // Insert only uniqueue blob so as not to have duplicates.
+                // If binary data already in DB just link existing
+                // data with new file item
                 let len = data.len() as i32;
                 tx.execute(
                     "INSERT INTO blob (blake3_hash, data, size) VALUES (?1, ?2, ?3)",
