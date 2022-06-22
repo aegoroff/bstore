@@ -237,7 +237,7 @@ mod handlers {
                 }
             }
         } else {
-            // Zip archieve branch
+            // Zip archive branch
             info!("Start insert zipped bucket");
             let buff = Cursor::new(result);
 
