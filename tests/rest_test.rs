@@ -1,5 +1,4 @@
 use reqwest::Client;
-use reqwest::IntoUrl;
 use std::env;
 
 #[tokio::test]
