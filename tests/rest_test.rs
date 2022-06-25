@@ -27,8 +27,8 @@ async fn insert_many_from_form() {
         Ok(x) => {
             assert_eq!(x.status(), http::status::StatusCode::CREATED);
         },
-        Err(_) => {
-            assert!(false);
+        Err(e) => {
+            assert!(false, "insert_many_from_form error: {}", e);
         }
     }
 }
