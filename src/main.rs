@@ -145,6 +145,7 @@ mod handlers {
     use bstore::file_reply::FileReply;
     use futures_util::{pin_mut, StreamExt};
     use std::convert::Infallible;
+    use std::fmt::Display;
     use std::io::Cursor;
     use std::io::Read;
     use warp::http::StatusCode;
@@ -225,17 +226,7 @@ mod handlers {
         if file_name != "zip" {
             // Plain file branch
             let insert_result = repository.insert_file(&file_name, &bucket, result);
-            match insert_result {
-                Ok(written) => {
-                    info!(
-                        "file: {} read: {} written: {}",
-                        &file_name, read_bytes, written
-                    );
-                }
-                Err(e) => {
-                    error!("file '{}' not inserted. Error: {}", &file_name, e);
-                }
-            }
+            log_insertion_result(insert_result, &file_name, read_bytes as u64);
         } else {
             // Zip archive branch
             info!("Start insert zipped bucket");
@@ -259,17 +250,7 @@ mod handlers {
                                 if let Ok(r) = r {
                                     let insert_result =
                                         repository.insert_file(outpath, &bucket, writer);
-                                    match insert_result {
-                                        Ok(written) => {
-                                            info!(
-                                                "file: {} read: {} written: {}",
-                                                outpath, r, written
-                                            );
-                                        }
-                                        Err(e) => {
-                                            error!("file '{}' not inserted. Error: {}", outpath, e);
-                                        }
-                                    }
+                                    log_insertion_result(insert_result, outpath, r);
                                 }
                             }
                             Err(e) => {
@@ -285,6 +266,24 @@ mod handlers {
             }
         }
         Ok(StatusCode::CREATED)
+    }
+
+    fn log_insertion_result<E: Display>(
+        insert_result: Result<usize, E>,
+        file_name: &str,
+        read_bytes: u64,
+    ) {
+        match insert_result {
+            Ok(written) => {
+                info!(
+                    "file: {} read: {} written: {}",
+                    file_name, read_bytes, written
+                );
+            }
+            Err(e) => {
+                error!("file '{}' not inserted. Error: {}", file_name, e);
+            }
+        }
     }
 
     async fn read_from_stream<S, B>(stream: S) -> (Vec<u8>, usize)
