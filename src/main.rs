@@ -177,20 +177,7 @@ mod handlers {
                     let stream = part.stream();
                     let (result, read_bytes) = read_from_stream(stream).await;
                     let insert_result = repository.insert_file(&file_name, &bucket, result);
-                    match insert_result {
-                        Ok(written) => {
-                            info!(
-                                "file: {} read: {} written: {}",
-                                &file_name, read_bytes, written
-                            );
-                        }
-                        Err(e) => {
-                            error!(
-                                "bucket '{}' file '{}' not inserted. Error: {:#?}",
-                                bucket, &file_name, e
-                            );
-                        }
-                    }
+                    log_insertion_result(insert_result, &file_name, read_bytes as u64);
                 }
                 Err(e) => {
                     error!("{:#?}", e);
