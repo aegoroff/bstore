@@ -35,7 +35,7 @@ pub async fn insert_many_from_form<P: AsRef<Path> + Clone + Send>(
                 let stream = part.stream();
                 let (result, read_bytes) = read_from_stream(stream).await;
                 let insert_result = repository.insert_file(&file_name, &bucket, result);
-                log_insertion_result(insert_result, &file_name, read_bytes as u64);
+                log_file_operation_result(insert_result, &file_name, read_bytes as u64);
             }
             Err(e) => {
                 error!("{:#?}", e);
@@ -71,7 +71,7 @@ where
     if file_name != "zip" {
         // Plain file branch
         let insert_result = repository.insert_file(&file_name, &bucket, result);
-        log_insertion_result(insert_result, &file_name, read_bytes as u64);
+        log_file_operation_result(insert_result, &file_name, read_bytes as u64);
     } else {
         // Zip archive branch
         info!("Start insert zipped bucket");
@@ -95,7 +95,7 @@ where
                             if let Ok(r) = r {
                                 let insert_result =
                                     repository.insert_file(outpath, &bucket, writer);
-                                log_insertion_result(insert_result, outpath, r);
+                                log_file_operation_result(insert_result, outpath, r);
                             }
                         }
                         Err(e) => {
@@ -113,12 +113,12 @@ where
     Ok(StatusCode::CREATED)
 }
 
-fn log_insertion_result<E: Display>(
-    insert_result: Result<usize, E>,
+fn log_file_operation_result<E: Display>(
+    operation_result: Result<usize, E>,
     file_name: &str,
     read_bytes: u64,
 ) {
-    match insert_result {
+    match operation_result {
         Ok(written) => {
             info!(
                 "file: {} read: {} written: {}",
