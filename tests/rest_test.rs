@@ -4,7 +4,7 @@ use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 
 #[tokio::test]
-async fn insert_many() {
+async fn insert_many_from_form() {
     // Arrange
     let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
     let client = Client::new();
@@ -17,13 +17,17 @@ async fn insert_many() {
 
     let part = reqwest::multipart::Part::stream_with_length(stream, 44462).file_name("profile");
     let form = reqwest::multipart::Form::new().part("file", part);
+
+    // Act
     let result = client.post(uri).multipart(form).send().await;
+
+    // Assert
     match result {
         Ok(x) => {
-            println!("{:#?}", x.status());
+            assert_eq!(x.status(), http::status::StatusCode::CREATED);
         },
-        Err(e) => {
-            println!("{}", e);
+        Err(_) => {
+            assert!(false);
         }
     }
 }
