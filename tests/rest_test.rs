@@ -3,6 +3,10 @@ use std::{env, path::PathBuf};
 use tokio::{fs::File, io::BufWriter, io::AsyncWriteExt};
 use tokio_util::io::ReaderStream;
 use test_context::{test_context, AsyncTestContext};
+use std::io;
+use std::fs::{self, DirEntry};
+use std::path::Path;
+use uuid::Uuid;
 
 const BSTORE_TEST_ROOT: &str = "bstore_test";
 
@@ -17,6 +21,22 @@ async fn create_file<'a>(f: PathBuf, content: &'a [u8]) {
         writer.write_all(content).await.unwrap();
         writer.flush().await.unwrap();
     }
+}
+
+// one possible implementation of walking a directory only visiting files
+fn visit_dirs(dir: &Path, cb: &mut dyn FnMut(&DirEntry)) -> io::Result<()> {
+    if dir.is_dir() {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                visit_dirs(&path, cb)?;
+            } else {
+                cb(&entry);
+            }
+        }
+    }
+    Ok(())
 }
 
 #[async_trait::async_trait]
@@ -52,15 +72,28 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
     let client = Client::new();
-    let uri = format!("http://localhost:{port}/api/test");
+    let id = Uuid::new_v4();
+    let uri = format!("http://localhost:{port}/api/{id}");
 
-    let f = File::open("D:\\profile").await.unwrap();
-    let meta = f.metadata().await.unwrap();
-    let stream = ReaderStream::new(f);
-    let stream = reqwest::Body::wrap_stream(stream);
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut handler= |entry: &DirEntry| {
+        files.push(entry.path());
+    };
+    visit_dirs(&ctx.root, &mut handler).unwrap();
 
-    let part = reqwest::multipart::Part::stream_with_length(stream, meta.len()).file_name("profile");
-    let form = reqwest::multipart::Form::new().part("file", part);
+    let root_path = ctx.root.to_str().unwrap();
+
+    let mut form = reqwest::multipart::Form::new();
+    for file in files {
+        let relative = String::from(&file.to_str().unwrap().strip_prefix(root_path).unwrap()[1..]);
+
+        let f = File::open(file).await.unwrap();
+        let meta = f.metadata().await.unwrap();
+        let stream = ReaderStream::new(f);
+        let stream = reqwest::Body::wrap_stream(stream);
+        let part = reqwest::multipart::Part::stream_with_length(stream, meta.len()).file_name(relative);
+        form = form.part("file", part);
+    }
 
     // Act
     let result = client.post(uri).multipart(form).send().await;
