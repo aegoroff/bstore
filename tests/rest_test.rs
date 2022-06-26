@@ -1,17 +1,17 @@
 use reqwest::Client;
-use std::{env, path::PathBuf};
-use tokio::{fs::File, io::BufWriter, io::AsyncWriteExt};
-use tokio_util::io::ReaderStream;
-use test_context::{test_context, AsyncTestContext};
-use std::io;
 use std::fs::{self, DirEntry};
+use std::io;
 use std::path::Path;
+use std::{env, path::PathBuf};
+use test_context::{test_context, AsyncTestContext};
+use tokio::{fs::File, io::AsyncWriteExt, io::BufWriter};
+use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
 const BSTORE_TEST_ROOT: &str = "bstore_test";
 
 struct BstoreAsyncContext {
-    root: PathBuf
+    root: PathBuf,
 }
 
 async fn create_file<'a>(f: PathBuf, content: &'a [u8]) {
@@ -62,7 +62,9 @@ impl AsyncTestContext for BstoreAsyncContext {
     }
 
     async fn teardown(self) {
-        tokio::fs::remove_dir_all(self.root).await.unwrap_or_default();
+        tokio::fs::remove_dir_all(self.root)
+            .await
+            .unwrap_or_default();
     }
 }
 
@@ -76,7 +78,7 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
     let uri = format!("http://localhost:{port}/api/{id}");
 
     let mut files: Vec<PathBuf> = Vec::new();
-    let mut handler= |entry: &DirEntry| {
+    let mut handler = |entry: &DirEntry| {
         files.push(entry.path());
     };
     visit_dirs(&ctx.root, &mut handler).unwrap();
@@ -91,7 +93,8 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
         let meta = f.metadata().await.unwrap();
         let stream = ReaderStream::new(f);
         let stream = reqwest::Body::wrap_stream(stream);
-        let part = reqwest::multipart::Part::stream_with_length(stream, meta.len()).file_name(relative);
+        let part =
+            reqwest::multipart::Part::stream_with_length(stream, meta.len()).file_name(relative);
         form = form.part("file", part);
     }
 
@@ -102,7 +105,7 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
     match result {
         Ok(x) => {
             assert_eq!(x.status(), http::status::StatusCode::CREATED);
-        },
+        }
         Err(e) => {
             assert!(false, "insert_many_from_form error: {}", e);
         }
