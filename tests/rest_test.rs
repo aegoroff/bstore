@@ -1,13 +1,22 @@
 use reqwest::Client;
-use std::env;
-use tokio::fs::File;
+use std::{env, path::PathBuf};
+use tokio::{fs::File, io::BufWriter, io::AsyncWriteExt};
 use tokio_util::io::ReaderStream;
 use test_context::{test_context, AsyncTestContext};
 
 const BSTORE_TEST_ROOT: &str = "bstore_test";
 
 struct BstoreAsyncContext {
-    value: String
+    root: PathBuf
+}
+
+async fn create_file<'a>(f: PathBuf, content: &'a [u8]) {
+    let f = File::create(f).await.unwrap();
+    {
+        let mut writer = BufWriter::new(f);
+        writer.write_all(content).await.unwrap();
+        writer.flush().await.unwrap();
+    }
 }
 
 #[async_trait::async_trait]
@@ -21,11 +30,19 @@ impl AsyncTestContext for BstoreAsyncContext {
         let f3 = d1.join("f1");
         let f4 = d2.join("f2");
 
-        BstoreAsyncContext { value: "Hello, world!".to_string() }
+        tokio::fs::create_dir_all(d1).await.unwrap_or_default();
+        tokio::fs::create_dir_all(d2).await.unwrap_or_default();
+
+        create_file(f1, b"f1").await;
+        create_file(f2, b"f2").await;
+        create_file(f3, b"f3").await;
+        create_file(f4, b"f4").await;
+
+        BstoreAsyncContext { root }
     }
 
     async fn teardown(self) {
-        // Perform any teardown you wish.
+        tokio::fs::remove_dir_all(self.root).await.unwrap_or_default();
     }
 }
 
