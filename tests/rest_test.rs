@@ -1,3 +1,5 @@
+use bstore::domain::DeleteResult;
+use bstore::domain::File as FileItem;
 use reqwest::Client;
 use std::fs::{self, DirEntry};
 use std::io;
@@ -108,6 +110,101 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
         }
         Err(e) => {
             assert!(false, "insert_many_from_form error: {}", e);
+        }
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+async fn delete_bucket(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
+    let client = Client::new();
+    let id = Uuid::new_v4();
+    let uri = format!("http://localhost:{port}/api/{id}");
+
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut handler = |entry: &DirEntry| {
+        files.push(entry.path());
+    };
+    visit_dirs(&ctx.root, &mut handler).unwrap();
+
+    let root_path = ctx.root.to_str().unwrap();
+
+    let mut form = reqwest::multipart::Form::new();
+    for file in files {
+        let relative = String::from(&file.to_str().unwrap().strip_prefix(root_path).unwrap()[1..]);
+
+        let f = File::open(file).await.unwrap();
+        let meta = f.metadata().await.unwrap();
+        let stream = ReaderStream::new(f);
+        let stream = reqwest::Body::wrap_stream(stream);
+        let part =
+            reqwest::multipart::Part::stream_with_length(stream, meta.len()).file_name(relative);
+        form = form.part("file", part);
+    }
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+
+    // Act
+    let result: Result<DeleteResult, reqwest::Error> =
+        client.delete(uri).send().await.unwrap().json().await;
+
+    // Assert
+    match result {
+        Ok(x) => {
+            assert_eq!(x.files, 4);
+            assert_eq!(x.blobs, 0);
+        }
+        Err(e) => {
+            assert!(false, "delete_bucket error: {}", e);
+        }
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+async fn get_bucket_files(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
+    let client = Client::new();
+    let id = Uuid::new_v4();
+    let uri = format!("http://localhost:{port}/api/{id}");
+
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut handler = |entry: &DirEntry| {
+        files.push(entry.path());
+    };
+    visit_dirs(&ctx.root, &mut handler).unwrap();
+
+    let root_path = ctx.root.to_str().unwrap();
+
+    let mut form = reqwest::multipart::Form::new();
+    for file in files {
+        let relative = String::from(&file.to_str().unwrap().strip_prefix(root_path).unwrap()[1..]);
+
+        let f = File::open(file).await.unwrap();
+        let meta = f.metadata().await.unwrap();
+        let stream = ReaderStream::new(f);
+        let stream = reqwest::Body::wrap_stream(stream);
+        let part =
+            reqwest::multipart::Part::stream_with_length(stream, meta.len()).file_name(relative);
+        form = form.part("file", part);
+    }
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+
+    // Act
+    let result: Result<Vec<FileItem>, reqwest::Error> =
+        client.get(uri).send().await.unwrap().json().await;
+
+    // Assert
+    match result {
+        Ok(x) => {
+            assert_eq!(x.len(), 4);
+        }
+        Err(e) => {
+            assert!(false, "get_bucket_files error: {}", e);
         }
     }
 }
