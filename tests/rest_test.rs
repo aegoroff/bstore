@@ -2,14 +2,40 @@ use reqwest::Client;
 use std::env;
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
+use test_context::{test_context, AsyncTestContext};
 
+const BSTORE_TEST_ROOT: &str = "bstore_test";
+
+struct BstoreAsyncContext {
+    value: String
+}
+
+#[async_trait::async_trait]
+impl AsyncTestContext for BstoreAsyncContext {
+    async fn setup() -> BstoreAsyncContext {
+        let root = env::temp_dir().join(BSTORE_TEST_ROOT);
+        let d1 = root.join("d1");
+        let d2 = root.join("d2");
+        let f1 = root.join("f1");
+        let f2 = root.join("f2");
+        let f3 = d1.join("f1");
+        let f4 = d2.join("f2");
+
+        BstoreAsyncContext { value: "Hello, world!".to_string() }
+    }
+
+    async fn teardown(self) {
+        // Perform any teardown you wish.
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
 #[tokio::test]
-async fn insert_many_from_form() {
+async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
     let client = Client::new();
     let uri = format!("http://localhost:{port}/api/test");
-
 
     let f = File::open("D:\\profile").await.unwrap();
     let meta = f.metadata().await.unwrap();
