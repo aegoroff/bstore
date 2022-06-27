@@ -1,3 +1,4 @@
+use bstore::domain::Bucket;
 use bstore::domain::DeleteResult;
 use bstore::domain::File as FileItem;
 use reqwest::Client;
@@ -175,6 +176,34 @@ async fn get_bucket_files(ctx: &mut BstoreAsyncContext) {
         }
         Err(e) => {
             assert!(false, "get_bucket_files error: {}", e);
+        }
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+async fn get_buckets(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let id = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
+
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+
+    // Act
+    let uri = format!("http://localhost:{}/api/", ctx.port);
+    let result: Result<Vec<Bucket>, reqwest::Error> =
+        client.get(uri).send().await.unwrap().json().await;
+
+    // Assert
+    match result {
+        Ok(x) => {
+            assert!(x.len() > 0);
+        }
+        Err(e) => {
+            assert!(false, "get_buckets error: {}", e);
         }
     }
 }
