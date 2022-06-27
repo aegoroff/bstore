@@ -41,6 +41,30 @@ fn visit_dirs(dir: &Path, cb: &mut dyn FnMut(&DirEntry)) -> io::Result<()> {
     Ok(())
 }
 
+async fn wrap_directory_into_multipart_form<'a>(root: &PathBuf) -> io::Result<reqwest::multipart::Form> {
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut handler = |entry: &DirEntry| {
+        files.push(entry.path());
+    };
+    visit_dirs(root, &mut handler)?;
+
+    let root_path = root.to_str().unwrap();
+
+    let mut form = reqwest::multipart::Form::new();
+    for file in files {
+        let relative = String::from(&file.to_str().unwrap().strip_prefix(root_path).unwrap()[1..]);
+
+        let f = File::open(file).await?;
+        let meta = f.metadata().await?;
+        let stream = ReaderStream::new(f);
+        let stream = reqwest::Body::wrap_stream(stream);
+        let part =
+            reqwest::multipart::Part::stream_with_length(stream, meta.len()).file_name(relative);
+        form = form.part("file", part);
+    }
+    Ok(form)
+}
+
 #[async_trait::async_trait]
 impl AsyncTestContext for BstoreAsyncContext {
     async fn setup() -> BstoreAsyncContext {
@@ -79,26 +103,7 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
     let id = Uuid::new_v4();
     let uri = format!("http://localhost:{port}/api/{id}");
 
-    let mut files: Vec<PathBuf> = Vec::new();
-    let mut handler = |entry: &DirEntry| {
-        files.push(entry.path());
-    };
-    visit_dirs(&ctx.root, &mut handler).unwrap();
-
-    let root_path = ctx.root.to_str().unwrap();
-
-    let mut form = reqwest::multipart::Form::new();
-    for file in files {
-        let relative = String::from(&file.to_str().unwrap().strip_prefix(root_path).unwrap()[1..]);
-
-        let f = File::open(file).await.unwrap();
-        let meta = f.metadata().await.unwrap();
-        let stream = ReaderStream::new(f);
-        let stream = reqwest::Body::wrap_stream(stream);
-        let part =
-            reqwest::multipart::Part::stream_with_length(stream, meta.len()).file_name(relative);
-        form = form.part("file", part);
-    }
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
     // Act
     let result = client.post(uri).multipart(form).send().await;
@@ -123,26 +128,7 @@ async fn delete_bucket(ctx: &mut BstoreAsyncContext) {
     let id = Uuid::new_v4();
     let uri = format!("http://localhost:{port}/api/{id}");
 
-    let mut files: Vec<PathBuf> = Vec::new();
-    let mut handler = |entry: &DirEntry| {
-        files.push(entry.path());
-    };
-    visit_dirs(&ctx.root, &mut handler).unwrap();
-
-    let root_path = ctx.root.to_str().unwrap();
-
-    let mut form = reqwest::multipart::Form::new();
-    for file in files {
-        let relative = String::from(&file.to_str().unwrap().strip_prefix(root_path).unwrap()[1..]);
-
-        let f = File::open(file).await.unwrap();
-        let meta = f.metadata().await.unwrap();
-        let stream = ReaderStream::new(f);
-        let stream = reqwest::Body::wrap_stream(stream);
-        let part =
-            reqwest::multipart::Part::stream_with_length(stream, meta.len()).file_name(relative);
-        form = form.part("file", part);
-    }
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
     client.post(&uri).multipart(form).send().await.unwrap();
 
@@ -171,26 +157,7 @@ async fn get_bucket_files(ctx: &mut BstoreAsyncContext) {
     let id = Uuid::new_v4();
     let uri = format!("http://localhost:{port}/api/{id}");
 
-    let mut files: Vec<PathBuf> = Vec::new();
-    let mut handler = |entry: &DirEntry| {
-        files.push(entry.path());
-    };
-    visit_dirs(&ctx.root, &mut handler).unwrap();
-
-    let root_path = ctx.root.to_str().unwrap();
-
-    let mut form = reqwest::multipart::Form::new();
-    for file in files {
-        let relative = String::from(&file.to_str().unwrap().strip_prefix(root_path).unwrap()[1..]);
-
-        let f = File::open(file).await.unwrap();
-        let meta = f.metadata().await.unwrap();
-        let stream = ReaderStream::new(f);
-        let stream = reqwest::Body::wrap_stream(stream);
-        let part =
-            reqwest::multipart::Part::stream_with_length(stream, meta.len()).file_name(relative);
-        form = form.part("file", part);
-    }
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
     client.post(&uri).multipart(form).send().await.unwrap();
 
