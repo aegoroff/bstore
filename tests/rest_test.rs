@@ -14,6 +14,7 @@ const BSTORE_TEST_ROOT: &str = "bstore_test";
 
 struct BstoreAsyncContext {
     root: PathBuf,
+    port: String,
 }
 
 async fn create_file<'a>(f: PathBuf, content: &'a [u8]) {
@@ -41,7 +42,9 @@ fn visit_dirs(dir: &Path, cb: &mut dyn FnMut(&DirEntry)) -> io::Result<()> {
     Ok(())
 }
 
-async fn wrap_directory_into_multipart_form<'a>(root: &PathBuf) -> io::Result<reqwest::multipart::Form> {
+async fn wrap_directory_into_multipart_form<'a>(
+    root: &PathBuf,
+) -> io::Result<reqwest::multipart::Form> {
     let mut files: Vec<PathBuf> = Vec::new();
     let mut handler = |entry: &DirEntry| {
         files.push(entry.path());
@@ -84,7 +87,10 @@ impl AsyncTestContext for BstoreAsyncContext {
         create_file(f3, b"f3").await;
         create_file(f4, b"f4").await;
 
-        BstoreAsyncContext { root }
+        BstoreAsyncContext {
+            root,
+            port: env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000")),
+        }
     }
 
     async fn teardown(self) {
@@ -98,10 +104,9 @@ impl AsyncTestContext for BstoreAsyncContext {
 #[tokio::test]
 async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
     // Arrange
-    let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
     let client = Client::new();
     let id = Uuid::new_v4();
-    let uri = format!("http://localhost:{port}/api/{id}");
+    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
 
     let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
@@ -123,10 +128,9 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
 #[tokio::test]
 async fn delete_bucket(ctx: &mut BstoreAsyncContext) {
     // Arrange
-    let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
     let client = Client::new();
     let id = Uuid::new_v4();
-    let uri = format!("http://localhost:{port}/api/{id}");
+    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
 
     let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
@@ -152,10 +156,9 @@ async fn delete_bucket(ctx: &mut BstoreAsyncContext) {
 #[tokio::test]
 async fn get_bucket_files(ctx: &mut BstoreAsyncContext) {
     // Arrange
-    let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
     let client = Client::new();
     let id = Uuid::new_v4();
-    let uri = format!("http://localhost:{port}/api/{id}");
+    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
 
     let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
