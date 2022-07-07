@@ -88,7 +88,10 @@ where
                                 Some(path) => path.to_owned(),
                                 None => continue,
                             };
-                            let outpath = outpath.to_str().unwrap_or_default();
+                            let outpath = match outpath.to_str() {
+                                Some(p) => p,
+                                None => continue,
+                            };
 
                             let mut writer: Vec<u8> = vec![];
                             let r = std::io::copy(&mut zip_file, &mut writer);
