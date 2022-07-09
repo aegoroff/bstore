@@ -1,4 +1,3 @@
-use log::error;
 use std::io::{Read, Write};
 use std::path::Path;
 
@@ -86,7 +85,7 @@ impl Storage for Sqlite {
                 match blob.write_all(&data) {
                     Ok(_) => {}
                     Err(e) => {
-                        error!("{}", e);
+                        tracing::error!("{}", e);
                     }
                 }
                 blob.flush().unwrap_or_default();

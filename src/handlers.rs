@@ -1,72 +1,61 @@
 use super::*;
-use bstore::domain::{DeleteResult, Error};
+use axum::body::Bytes;
+use axum::extract::BodyStream;
+use axum::response::IntoResponse;
+use axum::Json;
+use bstore::domain::DeleteResult;
 use bstore::file_reply::FileReply;
-use futures_util::{pin_mut, StreamExt};
-use std::convert::Infallible;
+use futures::{Stream, TryStreamExt};
+use futures_util::StreamExt;
 use std::fmt::Display;
-use std::io::Cursor;
 use std::io::Read;
-use warp::http::StatusCode;
-use warp::multipart::FormData;
-use warp::reply::WithStatus;
-use warp::{Reply, Stream};
+use std::io::{self, Cursor};
+use std::path::PathBuf;
+use tokio_util::io::StreamReader;
 
-pub async fn insert_many_from_form<P: AsRef<Path> + Clone + Send>(
-    bucket: String,
-    db: P,
-    form: FormData,
-) -> Result<impl warp::Reply, Infallible> {
+pub async fn insert_many_from_form(
+    EPath(bucket): EPath<String>,
+    ContentLengthLimit(mut multipart): ContentLengthLimit<
+        Multipart,
+        {
+            2 * 1024 * 1024 * 1024 /* 2GB */
+        },
+    >,
+    Extension(db): Extension<PathBuf>,
+) -> impl IntoResponse {
     let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
         Ok(s) => s,
         Err(e) => {
-            error!("{}", e);
-            return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+            tracing::error!("{e}");
+            return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
         }
     };
 
-    info!("bucket {}", bucket);
-
-    pin_mut!(form);
-
-    while let Some(value) = form.next().await {
-        match value {
-            Ok(part) => {
-                let file_name = part.filename().unwrap_or_default().to_string();
-                let stream = part.stream();
-                let (result, read_bytes) = read_from_stream(stream).await;
-                let insert_result = repository.insert_file(&file_name, &bucket, result);
-                log_file_operation_result(insert_result, &file_name, read_bytes as u64);
-            }
-            Err(e) => {
-                error!("{:#?}", e);
-            }
-        }
+    tracing::info!("create bucket: {bucket}");
+    while let Some(field) = multipart.next_field().await.unwrap() {
+        let file_name = field.file_name().unwrap_or_default().to_string();
+        let (result, read_bytes) = read_from_stream(field).await;
+        let insert_result = repository.insert_file(&file_name, &bucket, result);
+        log_file_operation_result(insert_result, &file_name, read_bytes as u64);
     }
 
-    Ok(StatusCode::CREATED)
+    (StatusCode::CREATED, String::default())
 }
 
-pub async fn insert_file_or_zipped_bucket<S, B, P>(
-    bucket: String,
-    file_name: String,
-    db: P,
-    stream: S,
-) -> Result<impl warp::Reply, Infallible>
-where
-    S: Stream<Item = Result<B, warp::Error>>,
-    S: StreamExt,
-    B: warp::Buf,
-    P: AsRef<Path> + Clone + Send,
-{
+pub async fn insert_file_or_zipped_bucket(
+    EPath((bucket, file_name)): EPath<(String, String)>,
+    body: BodyStream,
+    Extension(db): Extension<PathBuf>,
+) -> impl IntoResponse {
     let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
         Ok(s) => s,
         Err(e) => {
-            error!("{}", e);
-            return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+            tracing::error!("{e}");
+            return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
         }
     };
 
-    let (result, read_bytes) = read_from_stream(stream).await;
+    let (result, read_bytes) = read_from_stream(body).await;
 
     if file_name != "zip" {
         // Plain file branch
@@ -74,7 +63,6 @@ where
         log_file_operation_result(insert_result, &file_name, read_bytes as u64);
     } else {
         // Zip archive branch
-        info!("Start insert zipped bucket");
         let buff = Cursor::new(result);
 
         let zip_result = zip::ZipArchive::new(buff);
@@ -102,18 +90,19 @@ where
                             }
                         }
                         Err(e) => {
-                            error!("file not extracted. Error: {:#?}", e);
+                            tracing::error!("file not extracted. Error: {:#?}", e);
                         }
                     }
                 }
             }
             Err(e) => {
-                error!("{:#?}", e);
-                return Ok(StatusCode::INTERNAL_SERVER_ERROR);
+                tracing::error!("{:#?}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
             }
         }
     }
-    Ok(StatusCode::CREATED)
+
+    (StatusCode::CREATED, String::default())
 }
 
 fn log_file_operation_result<E: Display>(
@@ -123,64 +112,69 @@ fn log_file_operation_result<E: Display>(
 ) {
     match operation_result {
         Ok(written) => {
-            info!(
+            tracing::info!(
                 "file: {} read: {} written: {}",
-                file_name, read_bytes, written
+                file_name,
+                read_bytes,
+                written
             );
         }
         Err(e) => {
-            error!("file '{}' not inserted. Error: {}", file_name, e);
+            tracing::error!("file '{}' not inserted. Error: {}", file_name, e);
         }
     }
 }
 
-async fn read_from_stream<S, B>(stream: S) -> (Vec<u8>, usize)
+async fn read_from_stream<S, E>(stream: S) -> (Vec<u8>, usize)
 where
-    S: Stream<Item = Result<B, warp::Error>>,
+    S: Stream<Item = Result<Bytes, E>>,
     S: StreamExt,
-    B: warp::Buf,
+    E: std::marker::Sync + std::error::Error + std::marker::Send + 'static,
 {
-    pin_mut!(stream);
     let mut result = Vec::new();
     let mut read_bytes = 0usize;
-    while let Some(value) = stream.next().await {
-        if let Ok(buf) = value {
-            let mut rdr = buf.reader();
-            let mut buffer = Vec::new();
-            read_bytes += rdr.read_to_end(&mut buffer).unwrap_or_default();
-            result.append(&mut buffer);
-        }
+
+    async {
+        // Convert the stream into an `AsyncRead`.
+        let body_with_io_error = stream.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
+        let body_reader = StreamReader::new(body_with_io_error);
+        futures::pin_mut!(body_reader);
+        let mut buffer = Vec::new();
+
+        read_bytes += tokio::io::copy(&mut body_reader, &mut buffer)
+            .await
+            .unwrap() as usize;
+        result.append(&mut buffer);
     }
+    .await;
     (result, read_bytes)
 }
 
-pub async fn delete_bucket<P: AsRef<Path> + Clone + Send>(
-    bucket: String,
-    db: P,
-) -> Result<impl warp::Reply, Infallible> {
+pub async fn delete_bucket(
+    EPath(bucket): EPath<String>,
+    Extension(db): Extension<PathBuf>,
+) -> Result<impl IntoResponse, String> {
     let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
         Ok(s) => s,
         Err(e) => {
-            error!("{}", e);
-            let result = Error {
-                error: format!("{}", e),
-            };
-            let json = warp::reply::json(&result);
-            return with_status(json, StatusCode::INTERNAL_SERVER_ERROR);
+            tracing::error!("{e}");
+            return Err(e.to_string());
         }
     };
 
     let delete_result = repository.delete_bucket(&bucket);
     let result = match delete_result {
         Ok(deleted) => {
-            info!(
+            tracing::info!(
                 "bucket: {} deleted. The number of files removed {} blobs removed {}",
-                &bucket, deleted.files, deleted.blobs
+                &bucket,
+                deleted.files,
+                deleted.blobs
             );
             deleted
         }
         Err(e) => {
-            error!("bucket '{}' not deleted. Error: {}", &bucket, e);
+            tracing::error!("bucket '{}' not deleted. Error: {}", &bucket, e);
             DeleteResult::default()
         }
     };
@@ -190,58 +184,45 @@ pub async fn delete_bucket<P: AsRef<Path> + Clone + Send>(
     } else {
         StatusCode::OK
     };
-    let json = warp::reply::json(&result);
-    with_status(json, status)
+    Ok((status, Json(result)))
 }
 
-pub async fn get_buckets<P: AsRef<Path> + Clone + Send>(
-    db: P,
-) -> Result<impl warp::Reply, Infallible> {
-    let mut repository = match Sqlite::open(db, Mode::ReadOnly) {
+pub async fn get_buckets(Extension(db): Extension<PathBuf>) -> Result<impl IntoResponse, String> {
+    let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
         Ok(s) => s,
         Err(e) => {
-            error!("{}", e);
-            let result = Error {
-                error: format!("{}", e),
-            };
-            let json = warp::reply::json(&result);
-            return with_status(json, StatusCode::INTERNAL_SERVER_ERROR);
+            tracing::error!("{e}");
+            return Err(e.to_string());
         }
     };
     let result = repository.get_buckets().unwrap_or_default();
-    let json = warp::reply::json(&result);
-    with_status(json, StatusCode::OK)
+    Ok(Json(result))
 }
 
-pub async fn get_files<P: AsRef<Path> + Clone + Send>(
-    bucket: String,
-    db: P,
-) -> Result<impl warp::Reply, Infallible> {
-    let mut repository = match Sqlite::open(db, Mode::ReadOnly) {
+pub async fn get_files(
+    EPath(bucket): EPath<String>,
+    Extension(db): Extension<PathBuf>,
+) -> Result<impl IntoResponse, String> {
+    let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
         Ok(s) => s,
         Err(e) => {
-            error!("{}", e);
-            let result = Error {
-                error: format!("{}", e),
-            };
-            let json = warp::reply::json(&result);
-            return with_status(json, StatusCode::INTERNAL_SERVER_ERROR);
+            tracing::error!("{e}");
+            return Err(e.to_string());
         }
     };
     let result = repository.get_files(&bucket).unwrap_or_default();
-    let json = warp::reply::json(&result);
     let status = if result.is_empty() {
         StatusCode::NOT_FOUND
     } else {
         StatusCode::OK
     };
-    with_status(json, status)
+    Ok((status, Json(result)))
 }
 
-pub async fn get_file_content<P: AsRef<Path> + Clone + Send>(
-    id: i64,
-    db: P,
-) -> Result<impl warp::Reply, Infallible> {
+pub async fn get_file_content(
+    EPath(id): EPath<i64>,
+    Extension(db): Extension<PathBuf>,
+) -> Result<impl IntoResponse, String> {
     let mut repository = Sqlite::open(db, Mode::ReadOnly).unwrap();
     let info = repository.get_file_info(id).unwrap();
 
@@ -250,24 +231,20 @@ pub async fn get_file_content<P: AsRef<Path> + Clone + Send>(
     // NOTE: Find way to pass raw Read to stream
     let mut content = Vec::<u8>::with_capacity(info.size);
     let size = rdr.read_to_end(&mut content).unwrap_or_default();
-    info!("File size {}", size);
+    tracing::info!("File size {}", size);
 
     Ok(FileReply::new(content, info))
 }
 
-pub async fn delete_file<P: AsRef<Path> + Clone + Send>(
-    id: i64,
-    db: P,
-) -> Result<impl warp::Reply, Infallible> {
+pub async fn delete_file(
+    EPath(id): EPath<i64>,
+    Extension(db): Extension<PathBuf>,
+) -> Result<impl IntoResponse, String> {
     let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
         Ok(s) => s,
         Err(e) => {
-            error!("{}", e);
-            let result = Error {
-                error: format!("{}", e),
-            };
-            let json = warp::reply::json(&result);
-            return with_status(json, StatusCode::INTERNAL_SERVER_ERROR);
+            tracing::error!("{e}");
+            return Err(e.to_string());
         }
     };
 
@@ -275,15 +252,15 @@ pub async fn delete_file<P: AsRef<Path> + Clone + Send>(
     let result = match delete_result {
         Ok(deleted) => {
             if deleted.files > 0 {
-                info!("file: {} deleted", id);
+                tracing::info!("file: {} deleted", id);
             } else {
-                info!("file: {} not exist", id);
+                tracing::info!("file: {} not exist", id);
             }
 
             deleted
         }
         Err(e) => {
-            error!("file '{}' not deleted. Error: {}", id, e);
+            tracing::error!("file '{}' not deleted. Error: {}", id, e);
             DeleteResult::default()
         }
     };
@@ -293,10 +270,5 @@ pub async fn delete_file<P: AsRef<Path> + Clone + Send>(
     } else {
         StatusCode::OK
     };
-    let json = warp::reply::json(&result);
-    with_status(json, status)
-}
-
-fn with_status<R: Reply>(result: R, status: StatusCode) -> Result<WithStatus<R>, Infallible> {
-    Ok(warp::reply::with_status(result, status))
+    Ok((status, Json(result)))
 }

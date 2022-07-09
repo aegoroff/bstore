@@ -1,5 +1,9 @@
 use crate::domain::File;
-use warp::hyper::Body;
+use axum::{
+    body::Full,
+    http::HeaderValue,
+    response::{IntoResponse, Response},
+};
 
 pub struct FileReply {
     data: Vec<u8>,
@@ -23,17 +27,25 @@ impl FileReply {
     }
 }
 
-impl warp::Reply for FileReply {
-    fn into_response(self) -> warp::reply::Response {
-        warp::http::Response::builder()
-            .header("content-type", "application/octet-stream")
-            .header(
-                "content-disposition",
-                format!("attachment; filename=\"{}\"", self.name_from_path()),
-            )
-            .header("Content-Length", self.file.size)
-            .body(Body::from(self.data))
-            .unwrap_or_default()
+impl IntoResponse for FileReply {
+    fn into_response(self) -> Response {
+        let file_name = self.name_from_path().to_owned();
+        let mut res = Full::from(self.data).into_response();
+        res.headers_mut().insert(
+            "content-type",
+            HeaderValue::from_static("application/octet-stream"),
+        );
+        let attachment = format!("attachment; filename=\"{file_name}\"");
+        res.headers_mut().insert(
+            "content-disposition",
+            HeaderValue::from_str(attachment.as_str()).unwrap(),
+        );
+        let len = self.file.size.to_string();
+        res.headers_mut().insert(
+            "Content-Length",
+            HeaderValue::from_str(len.as_str()).unwrap(),
+        );
+        res
     }
 }
 

@@ -40,8 +40,3 @@ pub struct DeleteResult {
     pub files: usize,
     pub blobs: usize,
 }
-
-#[derive(Serialize, Deserialize, Default)]
-pub struct Error {
-    pub error: String,
-}
