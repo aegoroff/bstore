@@ -199,6 +199,7 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
     }
 }
 
+#[cfg(not(unix))]
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
 async fn insert_many_from_form_concurrently(ctx: &mut BstoreAsyncContext) {
