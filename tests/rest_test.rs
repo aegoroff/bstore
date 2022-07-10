@@ -40,7 +40,8 @@ struct BstoreAsyncContext {
 }
 
 async fn create_file<'a>(f: PathBuf, content: &'a [u8]) {
-    let f = File::create(f).await.unwrap();
+    let error_message = format!("no such file {}", f.to_str().unwrap());
+    let f = File::create(f).await.expect(&error_message);
     {
         let mut writer = BufWriter::new(f);
         writer.write_all(content).await.unwrap();
