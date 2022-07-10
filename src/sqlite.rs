@@ -222,7 +222,7 @@ impl Storage for Sqlite {
 }
 
 impl Sqlite {
-    pub fn open<P: AsRef<Path>>(path: P, mode: Mode) -> Result<impl Storage, Error> {
+    pub fn open<P: AsRef<Path>>(path: P, mode: Mode) -> Result<Sqlite, Error> {
         let c = match mode {
             Mode::ReadWrite => Connection::open(path),
             Mode::ReadOnly => Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY),

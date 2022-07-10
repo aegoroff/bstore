@@ -46,63 +46,173 @@ pub async fn insert_file_or_zipped_bucket(
     EPath((bucket, file_name)): EPath<(String, String)>,
     body: BodyStream,
     Extension(db): Extension<PathBuf>,
-) -> impl IntoResponse {
-    let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("{e}");
-            return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
-        }
-    };
-
+) -> Result<impl IntoResponse, String> {
     let (result, read_bytes) = read_from_stream(body).await;
 
-    if file_name != "zip" {
-        // Plain file branch
-        let insert_result = repository.insert_file(&file_name, &bucket, result);
-        log_file_operation_result(insert_result, &file_name, read_bytes as u64);
-    } else {
-        // Zip archive branch
-        let buff = Cursor::new(result);
+    execute(db, Mode::ReadWrite, move |mut repository| {
+        if file_name != "zip" {
+            // Plain file branch
+            let insert_result = repository.insert_file(&file_name, &bucket, result);
+            log_file_operation_result(insert_result, &file_name, read_bytes as u64);
+        } else {
+            // Zip archive branch
+            let buff = Cursor::new(result);
 
-        let zip_result = zip::ZipArchive::new(buff);
+            let zip_result = zip::ZipArchive::new(buff);
 
-        match zip_result {
-            Ok(mut archive) => {
-                for i in 0..archive.len() {
-                    match archive.by_index(i) {
-                        Ok(mut zip_file) => {
-                            let outpath = match zip_file.enclosed_name() {
-                                Some(path) => path.to_owned(),
-                                None => continue,
-                            };
-                            let outpath = match outpath.to_str() {
-                                Some(p) => p,
-                                None => continue,
-                            };
+            match zip_result {
+                Ok(mut archive) => {
+                    for i in 0..archive.len() {
+                        match archive.by_index(i) {
+                            Ok(mut zip_file) => {
+                                let outpath = match zip_file.enclosed_name() {
+                                    Some(path) => path.to_owned(),
+                                    None => continue,
+                                };
+                                let outpath = match outpath.to_str() {
+                                    Some(p) => p,
+                                    None => continue,
+                                };
 
-                            let mut writer: Vec<u8> = vec![];
-                            let r = std::io::copy(&mut zip_file, &mut writer);
-                            if let Ok(r) = r {
-                                let insert_result =
-                                    repository.insert_file(outpath, &bucket, writer);
-                                log_file_operation_result(insert_result, outpath, r);
+                                let mut writer: Vec<u8> = vec![];
+                                let r = std::io::copy(&mut zip_file, &mut writer);
+                                if let Ok(r) = r {
+                                    let insert_result =
+                                        repository.insert_file(outpath, &bucket, writer);
+                                    log_file_operation_result(insert_result, outpath, r);
+                                }
                             }
-                        }
-                        Err(e) => {
-                            tracing::error!("file not extracted. Error: {:#?}", e);
+                            Err(e) => {
+                                tracing::error!("file not extracted. Error: {:#?}", e);
+                            }
                         }
                     }
                 }
-            }
-            Err(e) => {
-                tracing::error!("{:#?}", e);
-                return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+                Err(e) => {
+                    tracing::error!("{:#?}", e);
+                    return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+                }
             }
         }
-    }
 
-    (StatusCode::CREATED, String::default())
+        (StatusCode::CREATED, String::default())
+    })
+}
+
+pub async fn delete_bucket(
+    EPath(bucket): EPath<String>,
+    Extension(db): Extension<PathBuf>,
+) -> Result<impl IntoResponse, String> {
+    execute(db, Mode::ReadWrite, move |mut repository| {
+        let delete_result = repository.delete_bucket(&bucket);
+        let result = match delete_result {
+            Ok(deleted) => {
+                tracing::info!(
+                    "bucket: {} deleted. The number of files removed {} blobs removed {}",
+                    &bucket,
+                    deleted.files,
+                    deleted.blobs
+                );
+                deleted
+            }
+            Err(e) => {
+                tracing::error!("bucket '{}' not deleted. Error: {}", &bucket, e);
+                DeleteResult::default()
+            }
+        };
+
+        let status = if result.files == 0 {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::OK
+        };
+        (status, Json(result))
+    })
+}
+
+pub async fn get_buckets(Extension(db): Extension<PathBuf>) -> Result<impl IntoResponse, String> {
+    execute(db, Mode::ReadOnly, move |mut repository| {
+        let result = repository.get_buckets().unwrap_or_default();
+        Json(result)
+    })
+}
+
+pub async fn get_files(
+    EPath(bucket): EPath<String>,
+    Extension(db): Extension<PathBuf>,
+) -> Result<impl IntoResponse, String> {
+    execute(db, Mode::ReadOnly, move |mut repository| {
+        let result = repository.get_files(&bucket).unwrap_or_default();
+        let status = if result.is_empty() {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::OK
+        };
+        (status, Json(result))
+    })
+}
+
+pub async fn get_file_content(
+    EPath(id): EPath<i64>,
+    Extension(db): Extension<PathBuf>,
+) -> Result<impl IntoResponse, String> {
+    execute(db, Mode::ReadOnly, move |mut repository| {
+        let info = repository.get_file_info(id).unwrap();
+
+        let mut rdr = repository.get_file_data(id).unwrap();
+
+        // NOTE: Find way to pass raw Read to stream
+        let mut content = Vec::<u8>::with_capacity(info.size);
+        let size = rdr.read_to_end(&mut content).unwrap_or_default();
+        tracing::info!("File size {}", size);
+
+        FileReply::new(content, info)
+    })
+}
+
+pub async fn delete_file(
+    EPath(id): EPath<i64>,
+    Extension(db): Extension<PathBuf>,
+) -> Result<impl IntoResponse, String> {
+    execute(db, Mode::ReadWrite, move |mut repository| {
+        let delete_result = repository.delete_file(id);
+        let result = match delete_result {
+            Ok(deleted) => {
+                if deleted.files > 0 {
+                    tracing::info!("file: {} deleted", id);
+                } else {
+                    tracing::info!("file: {} not exist", id);
+                }
+
+                deleted
+            }
+            Err(e) => {
+                tracing::error!("file '{}' not deleted. Error: {}", id, e);
+                DeleteResult::default()
+            }
+        };
+
+        let status = if result.files == 0 {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::OK
+        };
+        (status, Json(result))
+    })
+}
+
+fn execute<F, R>(db: PathBuf, mode: Mode, action: F) -> Result<impl IntoResponse, String>
+where
+    F: FnOnce(Sqlite) -> R,
+    R: IntoResponse,
+{
+    match Sqlite::open(db, mode) {
+        Ok(s) => Ok(action(s)),
+        Err(e) => {
+            tracing::error!("{e}");
+            Err(e.to_string())
+        }
+    }
 }
 
 fn log_file_operation_result<E: Display>(
@@ -148,127 +258,4 @@ where
     }
     .await;
     (result, read_bytes)
-}
-
-pub async fn delete_bucket(
-    EPath(bucket): EPath<String>,
-    Extension(db): Extension<PathBuf>,
-) -> Result<impl IntoResponse, String> {
-    let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("{e}");
-            return Err(e.to_string());
-        }
-    };
-
-    let delete_result = repository.delete_bucket(&bucket);
-    let result = match delete_result {
-        Ok(deleted) => {
-            tracing::info!(
-                "bucket: {} deleted. The number of files removed {} blobs removed {}",
-                &bucket,
-                deleted.files,
-                deleted.blobs
-            );
-            deleted
-        }
-        Err(e) => {
-            tracing::error!("bucket '{}' not deleted. Error: {}", &bucket, e);
-            DeleteResult::default()
-        }
-    };
-
-    let status = if result.files == 0 {
-        StatusCode::NOT_FOUND
-    } else {
-        StatusCode::OK
-    };
-    Ok((status, Json(result)))
-}
-
-pub async fn get_buckets(Extension(db): Extension<PathBuf>) -> Result<impl IntoResponse, String> {
-    let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("{e}");
-            return Err(e.to_string());
-        }
-    };
-    let result = repository.get_buckets().unwrap_or_default();
-    Ok(Json(result))
-}
-
-pub async fn get_files(
-    EPath(bucket): EPath<String>,
-    Extension(db): Extension<PathBuf>,
-) -> Result<impl IntoResponse, String> {
-    let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("{e}");
-            return Err(e.to_string());
-        }
-    };
-    let result = repository.get_files(&bucket).unwrap_or_default();
-    let status = if result.is_empty() {
-        StatusCode::NOT_FOUND
-    } else {
-        StatusCode::OK
-    };
-    Ok((status, Json(result)))
-}
-
-pub async fn get_file_content(
-    EPath(id): EPath<i64>,
-    Extension(db): Extension<PathBuf>,
-) -> Result<impl IntoResponse, String> {
-    let mut repository = Sqlite::open(db, Mode::ReadOnly).unwrap();
-    let info = repository.get_file_info(id).unwrap();
-
-    let mut rdr = repository.get_file_data(id).unwrap();
-
-    // NOTE: Find way to pass raw Read to stream
-    let mut content = Vec::<u8>::with_capacity(info.size);
-    let size = rdr.read_to_end(&mut content).unwrap_or_default();
-    tracing::info!("File size {}", size);
-
-    Ok(FileReply::new(content, info))
-}
-
-pub async fn delete_file(
-    EPath(id): EPath<i64>,
-    Extension(db): Extension<PathBuf>,
-) -> Result<impl IntoResponse, String> {
-    let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("{e}");
-            return Err(e.to_string());
-        }
-    };
-
-    let delete_result = repository.delete_file(id);
-    let result = match delete_result {
-        Ok(deleted) => {
-            if deleted.files > 0 {
-                tracing::info!("file: {} deleted", id);
-            } else {
-                tracing::info!("file: {} not exist", id);
-            }
-
-            deleted
-        }
-        Err(e) => {
-            tracing::error!("file '{}' not deleted. Error: {}", id, e);
-            DeleteResult::default()
-        }
-    };
-
-    let status = if result.files == 0 {
-        StatusCode::NOT_FOUND
-    } else {
-        StatusCode::OK
-    };
-    Ok((status, Json(result)))
 }
