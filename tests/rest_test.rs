@@ -14,6 +14,10 @@ use rand::Rng;
 use reqwest::Client;
 use std::fs::{self, DirEntry};
 use std::io;
+use std::io::Cursor;
+use std::io::Read;
+use std::io::Seek;
+use std::io::Write;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::{env, path::PathBuf};
@@ -24,6 +28,8 @@ use tokio::{fs::File, io::AsyncWriteExt, io::BufWriter};
 use tokio_util::io::ReaderStream;
 use tokio_util::io::StreamReader;
 use uuid::Uuid;
+use zip::write::FileOptions;
+use walkdir::{DirEntry as WDirEntry, WalkDir};
 
 const BSTORE_TEST_ROOT: &str = "bstore_test";
 const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
@@ -89,6 +95,41 @@ async fn wrap_directory_into_multipart_form<'a>(
         form = form.part("file", part);
     }
     Ok(form)
+}
+
+fn zip_dir<T>(
+    it: &mut dyn Iterator<Item = WDirEntry>,
+    prefix: &str,
+    writer: T,
+) -> zip::result::ZipResult<()>
+where
+    T: Write + Seek,
+{
+    let mut zip = zip::ZipWriter::new(writer);
+    let options = FileOptions::default().unix_permissions(0o755);
+
+    let mut buffer = Vec::new();
+    for entry in it {
+        let path = entry.path();
+        let name = path.strip_prefix(Path::new(prefix)).unwrap();
+
+        // Write file or directory explicitly
+        // Some unzip tools unzip files with directory paths correctly, some do not!
+        if path.is_file() {
+            #[allow(deprecated)]
+            zip.start_file_from_path(name, options)?;
+            let mut f = std::fs::File::open(path)?;
+
+            f.read_to_end(&mut buffer)?;
+            zip.write_all(&*buffer)?;
+            buffer.clear();
+        } else if !name.as_os_str().is_empty() {
+            #[allow(deprecated)]
+            zip.add_directory_from_path(name, options)?;
+        }
+    }
+    zip.finish()?;
+    Result::Ok(())
 }
 
 impl BstoreAsyncContext {
@@ -233,6 +274,40 @@ async fn insert_one(ctx: &mut BstoreAsyncContext) {
             assert!(false, "insert_one error: {}", e);
         }
     }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+async fn insert_zip(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let id = Uuid::new_v4();
+
+    let uri = format!("http://localhost:{}/api/{id}/zip", ctx.port);
+
+    let dir_to_zip = ctx.root.to_str().unwrap();
+    let walkdir = WalkDir::new(dir_to_zip);
+    let it = walkdir.into_iter();
+
+    let zip = vec![];
+    let buff = Cursor::new(zip);
+    zip_dir(&mut it.filter_map(|e| e.ok()), dir_to_zip, buff).unwrap();
+    let cloned = vec![];
+    //cloned.copy_from_slice(zipped.by_ref());
+
+    // Act
+    let result = client.post(uri).body(cloned).send().await;
+
+    // Assert
+    match result {
+        Ok(x) => {
+            assert_eq!(x.status(), http::status::StatusCode::CREATED);
+        }
+        Err(e) => {
+            assert!(false, "insert_zip error: {}", e);
+        }
+    }
+    
 }
 
 #[test_context(BstoreAsyncContext)]
