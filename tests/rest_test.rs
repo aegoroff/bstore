@@ -116,8 +116,8 @@ impl AsyncTestContext for BstoreAsyncContext {
         let f3 = d1.join("f1");
         let f4 = d2.join("f2");
 
-        tokio::fs::create_dir_all(d1).await.unwrap_or_default();
-        tokio::fs::create_dir_all(d2).await.unwrap_or_default();
+        tokio::fs::create_dir_all(d1).await.unwrap();
+        tokio::fs::create_dir_all(d2).await.unwrap();
 
         create_file(f1, b"f1").await;
         create_file(f2, b"f2").await;
