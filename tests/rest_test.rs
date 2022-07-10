@@ -17,6 +17,7 @@ use std::io;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::{env, path::PathBuf};
+use std::{thread, time};
 use test_context::{test_context, AsyncTestContext};
 use tokio::task::JoinHandle;
 use tokio::{fs::File, io::AsyncWriteExt, io::BufWriter};
@@ -173,6 +174,8 @@ impl AsyncTestContext for BstoreAsyncContext {
         tokio::fs::remove_dir_all(self.root)
             .await
             .unwrap_or_default();
+        let timeout = time::Duration::from_millis(200);
+        thread::sleep(timeout);
     }
 }
 
@@ -208,9 +211,7 @@ async fn insert_one(ctx: &mut BstoreAsyncContext) {
     let id = Uuid::new_v4();
 
     let file = ctx.root.join("d1").join("f1");
-    let file_path = &file
-        .to_str()
-        .unwrap();
+    let file_path = &file.to_str().unwrap();
 
     let file_url = url_escape::encode_component(file_path);
     let uri = format!("http://localhost:{}/api/{id}/{file_url}", ctx.port);
