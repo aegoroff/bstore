@@ -7,7 +7,6 @@ use bstore::sqlite::Mode;
 use bstore::sqlite::Sqlite;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Sender;
-#[cfg(not(unix))]
 use futures::future::join_all;
 use futures::TryStreamExt;
 use http::StatusCode;
@@ -235,7 +234,6 @@ async fn insert_one(ctx: &mut BstoreAsyncContext) {
     }
 }
 
-#[cfg(not(unix))]
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
 async fn insert_many_from_form_concurrently(ctx: &mut BstoreAsyncContext) {
