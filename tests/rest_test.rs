@@ -8,6 +8,7 @@ use bstore::sqlite::Sqlite;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Sender;
 use futures::TryStreamExt;
+#[cfg(not(unix))]
 use futures::future::join_all;
 use http::StatusCode;
 use rand::Rng;
