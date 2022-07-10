@@ -38,6 +38,7 @@ async fn main() {
 
     Server::bind(&socket)
         .serve(app.into_make_service())
+        .with_graceful_shutdown(bstore::shutdown_signal())
         .await
         .unwrap();
 }

@@ -1,9 +1,17 @@
+use axum::Server;
 use bstore::domain::Bucket;
 use bstore::domain::DeleteResult;
 use bstore::domain::File as FileItem;
+use bstore::domain::Storage;
+use bstore::sqlite::Mode;
+use bstore::sqlite::Sqlite;
+use futures::channel::oneshot;
+use futures::channel::oneshot::Sender;
 use reqwest::Client;
+use tokio::task::JoinHandle;
 use std::fs::{self, DirEntry};
 use std::io;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::{env, path::PathBuf};
 use test_context::{test_context, AsyncTestContext};
@@ -12,10 +20,14 @@ use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
 const BSTORE_TEST_ROOT: &str = "bstore_test";
+const DB_FILE: &str = "bstore_test.db";
 
 struct BstoreAsyncContext {
     root: PathBuf,
+    db: PathBuf,
     port: String,
+    shutdown: Sender<()>,
+    join: JoinHandle<()>,
 }
 
 async fn create_file<'a>(f: PathBuf, content: &'a [u8]) {
@@ -69,10 +81,24 @@ async fn wrap_directory_into_multipart_form<'a>(
     Ok(form)
 }
 
+impl BstoreAsyncContext {
+    async fn remove_db(db_path: PathBuf) {
+        tokio::fs::remove_file(db_path.clone())
+            .await
+            .unwrap_or_default();
+        let base_db_file = db_path.as_os_str().to_str().unwrap().to_owned();
+        let chm_file = base_db_file.clone() + "-shm";
+        let wal_file = base_db_file + "-wal";
+        tokio::fs::remove_file(chm_file).await.unwrap_or_default();
+        tokio::fs::remove_file(wal_file).await.unwrap_or_default();
+    }
+}
+
 #[async_trait::async_trait]
 impl AsyncTestContext for BstoreAsyncContext {
     async fn setup() -> BstoreAsyncContext {
-        let root = env::temp_dir().join(BSTORE_TEST_ROOT);
+        let tmp_dir = env::temp_dir();
+        let root = tmp_dir.join(BSTORE_TEST_ROOT);
         let d1 = root.join("d1");
         let d2 = root.join("d2");
         let f1 = root.join("f1");
@@ -88,13 +114,45 @@ impl AsyncTestContext for BstoreAsyncContext {
         create_file(f3, b"f3").await;
         create_file(f4, b"f4").await;
 
+        let db = tmp_dir.join(DB_FILE);
+        if db.exists() {
+            BstoreAsyncContext::remove_db(db.clone()).await;
+        }
+
+        Sqlite::open(db.clone(), Mode::ReadWrite)
+            .expect("Database file cannot be created")
+            .new_database()
+            .unwrap_or_default();
+
+        let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
+
+        let (send, recv) = oneshot::channel::<()>();
+
+        let cloned_db = db.clone();
+        let cloned_port = port.clone();
+        let task = tokio::spawn(async move {
+            let app = bstore::create_routes(cloned_db);
+            let socket: SocketAddr = format!("0.0.0.0:{cloned_port}").parse().unwrap();
+            Server::bind(&socket)
+                .serve(app.into_make_service())
+                .with_graceful_shutdown(async { recv.await.unwrap() })
+                .await
+                .unwrap()
+        });
+
         BstoreAsyncContext {
             root,
-            port: env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000")),
+            db,
+            port,
+            shutdown: send,
+            join: task,
         }
     }
 
     async fn teardown(self) {
+        self.shutdown.send(()).unwrap_or_default();
+        self.join.await.unwrap_or_default();
+        BstoreAsyncContext::remove_db(self.db).await;
         tokio::fs::remove_dir_all(self.root)
             .await
             .unwrap_or_default();
@@ -200,7 +258,7 @@ async fn get_buckets(ctx: &mut BstoreAsyncContext) {
     // Assert
     match result {
         Ok(x) => {
-            assert!(x.len() > 0);
+            assert_eq!(x.len(), 1);
         }
         Err(e) => {
             assert!(false, "get_buckets error: {}", e);
