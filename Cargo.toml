@@ -36,6 +36,7 @@ uuid = { version = "1.1.2", features = [
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
     "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
 ]}
+rand = "0.8.5"
 
 [profile.release]
 lto = 'fat'

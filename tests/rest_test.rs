@@ -7,20 +7,24 @@ use bstore::sqlite::Mode;
 use bstore::sqlite::Sqlite;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Sender;
+use rand::Rng;
 use reqwest::Client;
-use tokio::task::JoinHandle;
 use std::fs::{self, DirEntry};
 use std::io;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::{env, path::PathBuf};
 use test_context::{test_context, AsyncTestContext};
+use tokio::task::JoinHandle;
 use tokio::{fs::File, io::AsyncWriteExt, io::BufWriter};
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
 const BSTORE_TEST_ROOT: &str = "bstore_test";
-const DB_FILE: &str = "bstore_test.db";
+const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                            abcdefghijklmnopqrstuvwxyz\
+                            0123456789_";
+const DB_LEN: usize = 20;
 
 struct BstoreAsyncContext {
     root: PathBuf,
@@ -114,7 +118,14 @@ impl AsyncTestContext for BstoreAsyncContext {
         create_file(f3, b"f3").await;
         create_file(f4, b"f4").await;
 
-        let db = tmp_dir.join(DB_FILE);
+        let db_file: String = (10..DB_LEN)
+            .map(|_| {
+                let idx = rand::thread_rng().gen_range(0..CHARSET.len());
+                CHARSET[idx] as char
+            })
+            .collect();
+
+        let db = tmp_dir.join(db_file + ".db");
         if db.exists() {
             BstoreAsyncContext::remove_db(db.clone()).await;
         }
@@ -124,7 +135,8 @@ impl AsyncTestContext for BstoreAsyncContext {
             .new_database()
             .unwrap_or_default();
 
-        let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
+        let port = rand::thread_rng().gen_range(5000..5500);
+        let port = port.to_string();
 
         let (send, recv) = oneshot::channel::<()>();
 
@@ -185,7 +197,7 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
 
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
-async fn delete_bucket(ctx: &mut BstoreAsyncContext) {
+async fn delete_bucket_and_all_blobls(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
     let id = Uuid::new_v4();
@@ -198,6 +210,38 @@ async fn delete_bucket(ctx: &mut BstoreAsyncContext) {
     // Act
     let result: Result<DeleteResult, reqwest::Error> =
         client.delete(uri).send().await.unwrap().json().await;
+
+    // Assert
+    match result {
+        Ok(x) => {
+            assert_eq!(x.files, 4);
+            assert_eq!(x.blobs, 4);
+        }
+        Err(e) => {
+            assert!(false, "delete_bucket error: {}", e);
+        }
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+async fn delete_bucket_but_keep_blobls(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let id1 = Uuid::new_v4();
+    let id2 = Uuid::new_v4();
+    let bucket1 = format!("http://localhost:{}/api/{id1}", ctx.port);
+    let bucket2 = format!("http://localhost:{}/api/{id2}", ctx.port);
+
+    let form1 = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+    let form2 = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+
+    client.post(&bucket1).multipart(form1).send().await.unwrap();
+    client.post(&bucket2).multipart(form2).send().await.unwrap();
+
+    // Act
+    let result: Result<DeleteResult, reqwest::Error> =
+        client.delete(bucket1).send().await.unwrap().json().await;
 
     // Assert
     match result {
