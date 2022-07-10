@@ -1,26 +1,16 @@
-use axum::{
-    extract::{ContentLengthLimit, Extension, Multipart, Path as EPath},
-    http::StatusCode,
-    routing::post,
-    routing::{delete, get},
-    Router, Server,
-};
+use axum::Server;
 use bstore::domain::Storage;
 use bstore::sqlite::{Mode, Sqlite};
+use std::env;
 use std::net::SocketAddr;
 use std::path::Path;
-use std::{env, time::Duration};
-use tower::ServiceBuilder;
-use tower_http::{classify::ServerErrorsFailureClass, trace::TraceLayer};
-use tracing::Span;
+
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 const DB_FILE: &str = "bstore.db";
 const CURRENT_DIR: &str = "./";
 
 extern crate tokio;
-
-mod handlers;
 
 #[tokio::main]
 async fn main() {
@@ -44,32 +34,7 @@ async fn main() {
     let socket: SocketAddr = format!("0.0.0.0:{port}").parse().unwrap();
     tracing::debug!("listening on {socket}");
 
-    let app = Router::new()
-        .route("/api/", get(handlers::get_buckets))
-        .route(
-            "/api/:bucket",
-            post(handlers::insert_many_from_form)
-                .delete(handlers::delete_bucket)
-                .get(handlers::get_files),
-        )
-        .route(
-            "/api/:bucket/:file_name",
-            post(handlers::insert_file_or_zipped_bucket),
-        )
-        .route(
-            "/api/file/:id",
-            delete(handlers::delete_file).get(handlers::get_file_content),
-        )
-        .layer(
-            ServiceBuilder::new()
-                .layer(TraceLayer::new_for_http().on_failure(
-                    |error: ServerErrorsFailureClass, _latency: Duration, _span: &Span| {
-                        tracing::error!("Server error: {error}");
-                    },
-                ))
-                .layer(Extension(db))
-                .into_inner(),
-        );
+    let app = bstore::create_routes(db);
 
     Server::bind(&socket)
         .serve(app.into_make_service())
