@@ -14,12 +14,12 @@ use std::path::PathBuf;
 use tokio_util::io::StreamReader;
 
 use axum::{
-    extract::{ContentLengthLimit, Extension, Multipart, Path as EPath},
+    extract::{ContentLengthLimit, Extension, Multipart, Path},
     http::StatusCode,
 };
 
 pub async fn insert_many_from_form(
-    EPath(bucket): EPath<String>,
+    Path(bucket): Path<String>,
     ContentLengthLimit(mut multipart): ContentLengthLimit<
         Multipart,
         {
@@ -48,7 +48,7 @@ pub async fn insert_many_from_form(
 }
 
 pub async fn insert_file_or_zipped_bucket(
-    EPath((bucket, file_name)): EPath<(String, String)>,
+    Path((bucket, file_name)): Path<(String, String)>,
     body: BodyStream,
     Extension(db): Extension<PathBuf>,
 ) -> Result<impl IntoResponse, String> {
@@ -105,7 +105,7 @@ pub async fn insert_file_or_zipped_bucket(
 }
 
 pub async fn delete_bucket(
-    EPath(bucket): EPath<String>,
+    Path(bucket): Path<String>,
     Extension(db): Extension<PathBuf>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadWrite, move |mut repository| {
@@ -143,7 +143,7 @@ pub async fn get_buckets(Extension(db): Extension<PathBuf>) -> Result<impl IntoR
 }
 
 pub async fn get_files(
-    EPath(bucket): EPath<String>,
+    Path(bucket): Path<String>,
     Extension(db): Extension<PathBuf>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadOnly, move |mut repository| {
@@ -158,7 +158,7 @@ pub async fn get_files(
 }
 
 pub async fn get_file_content(
-    EPath(id): EPath<i64>,
+    Path(id): Path<i64>,
     Extension(db): Extension<PathBuf>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadOnly, move |mut repository| {
@@ -176,7 +176,7 @@ pub async fn get_file_content(
 }
 
 pub async fn delete_file(
-    EPath(id): EPath<i64>,
+    Path(id): Path<i64>,
     Extension(db): Extension<PathBuf>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadWrite, move |mut repository| {
