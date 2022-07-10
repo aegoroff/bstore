@@ -203,14 +203,13 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
 #[tokio::test]
 async fn insert_many_from_form_concurrently(ctx: &mut BstoreAsyncContext) {
     let mut handles = Vec::new();
-    for _number in 0..20 {
+    for number in 0..20 {
         let port = ctx.port.clone();
         let root = ctx.root.clone();
         let task = tokio::spawn(async move {
             // Arrange
             let client = Client::new();
-            let id = Uuid::new_v4();
-            let uri = format!("http://localhost:{}/api/{id}", port);
+            let uri = format!("http://localhost:{}/api/{number}", port);
 
             let form = wrap_directory_into_multipart_form(&root).await.unwrap();
 
