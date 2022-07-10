@@ -215,7 +215,8 @@ async fn insert_one(ctx: &mut BstoreAsyncContext) {
     let file_url = url_escape::encode_component(file_path);
     let uri = format!("http://localhost:{}/api/{id}/{file_url}", ctx.port);
 
-    let f = File::open(file).await.unwrap();
+    let error_message = format!("no such file {}", file.to_str().unwrap());
+    let f = File::open(file).await.expect(&error_message);
     let stream = ReaderStream::new(f);
     let stream = reqwest::Body::wrap_stream(stream);
 
