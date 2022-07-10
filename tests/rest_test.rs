@@ -7,9 +7,9 @@ use bstore::sqlite::Mode;
 use bstore::sqlite::Sqlite;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Sender;
-use futures::TryStreamExt;
 #[cfg(not(unix))]
 use futures::future::join_all;
+use futures::TryStreamExt;
 use http::StatusCode;
 use rand::Rng;
 use reqwest::Client;
@@ -200,6 +200,39 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
     }
 }
 
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+async fn insert_one(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let id = Uuid::new_v4();
+
+    let file = ctx.root.join("d1").join("f1");
+    let file_path = &file
+        .to_str()
+        .unwrap();
+
+    let file_url = url_escape::encode_component(file_path);
+    let uri = format!("http://localhost:{}/api/{id}/{file_url}", ctx.port);
+
+    let f = File::open(file).await.unwrap();
+    let stream = ReaderStream::new(f);
+    let stream = reqwest::Body::wrap_stream(stream);
+
+    // Act
+    let result = client.post(uri).body(stream).send().await;
+
+    // Assert
+    match result {
+        Ok(x) => {
+            assert_eq!(x.status(), http::status::StatusCode::CREATED);
+        }
+        Err(e) => {
+            assert!(false, "insert_one error: {}", e);
+        }
+    }
+}
+
 #[cfg(not(unix))]
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
@@ -224,7 +257,7 @@ async fn insert_many_from_form_concurrently(ctx: &mut BstoreAsyncContext) {
                     assert_eq!(x.status(), http::status::StatusCode::CREATED);
                 }
                 Err(e) => {
-                    assert!(false, "insert_many_from_form error: {}", e);
+                    assert!(false, "insert_many_from_form_concurrently error: {}", e);
                 }
             }
         });
@@ -260,7 +293,7 @@ async fn delete_bucket_and_all_blobls(ctx: &mut BstoreAsyncContext) {
             assert_eq!(x.blobs, 4);
         }
         Err(e) => {
-            assert!(false, "delete_bucket error: {}", e);
+            assert!(false, "delete_bucket_and_all_blobls error: {}", e);
         }
     }
 }
@@ -292,7 +325,7 @@ async fn delete_bucket_but_keep_blobls(ctx: &mut BstoreAsyncContext) {
             assert_eq!(x.blobs, 0);
         }
         Err(e) => {
-            assert!(false, "delete_bucket error: {}", e);
+            assert!(false, "delete_bucket_but_keep_blobls error: {}", e);
         }
     }
 }
@@ -406,7 +439,7 @@ async fn delete_file_success(ctx: &mut BstoreAsyncContext) {
             assert_eq!(x.files, 1);
         }
         Err(e) => {
-            assert!(false, "delete file error: {}", e);
+            assert!(false, "delete_file_success error: {}", e);
         }
     }
 }

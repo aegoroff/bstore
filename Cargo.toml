@@ -37,6 +37,7 @@ uuid = { version = "1.1.2", features = [
     "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
 ]}
 rand = "0.8.5"
+url-escape = "0.1.1"
 
 [profile.release]
 lto = 'fat'
