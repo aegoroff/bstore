@@ -136,7 +136,7 @@ impl AsyncTestContext for BstoreAsyncContext {
         Sqlite::open(db.clone(), Mode::ReadWrite)
             .expect("Database file cannot be created")
             .new_database()
-            .unwrap_or_default();
+            .unwrap();
 
         let port = rand::thread_rng().gen_range(5000..5500);
         let port = port.to_string();
