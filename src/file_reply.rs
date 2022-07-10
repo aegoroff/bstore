@@ -35,7 +35,7 @@ impl IntoResponse for FileReply {
             "content-type",
             HeaderValue::from_static("application/octet-stream"),
         );
-        let attachment = format!("attachment; filename=\"{file_name}\"");
+        let attachment = format!(r#"attachment; filename="{file_name}""#);
         res.headers_mut().insert(
             "content-disposition",
             HeaderValue::from_str(attachment.as_str()).unwrap(),
