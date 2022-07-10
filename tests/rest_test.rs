@@ -7,6 +7,8 @@ use bstore::sqlite::Mode;
 use bstore::sqlite::Sqlite;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Sender;
+use futures::TryStreamExt;
+use http::StatusCode;
 use rand::Rng;
 use reqwest::Client;
 use std::fs::{self, DirEntry};
@@ -18,6 +20,7 @@ use test_context::{test_context, AsyncTestContext};
 use tokio::task::JoinHandle;
 use tokio::{fs::File, io::AsyncWriteExt, io::BufWriter};
 use tokio_util::io::ReaderStream;
+use tokio_util::io::StreamReader;
 use uuid::Uuid;
 
 const BSTORE_TEST_ROOT: &str = "bstore_test";
@@ -306,6 +309,94 @@ async fn get_buckets(ctx: &mut BstoreAsyncContext) {
         }
         Err(e) => {
             assert!(false, "get_buckets error: {}", e);
+        }
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+async fn get_file_content(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let id = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
+
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+    let result: Vec<FileItem> = client.get(uri).send().await.unwrap().json().await.unwrap();
+    let id = result[0].id;
+    let file_uri = format!("http://localhost:{}/api/file/{id}", ctx.port);
+
+    // Act
+    let result = client.get(file_uri).send().await.unwrap().bytes_stream();
+
+    // Assert
+    let body_with_io_error = result.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
+    let body_reader = StreamReader::new(body_with_io_error);
+    futures::pin_mut!(body_reader);
+    let mut buffer = Vec::new();
+    tokio::io::copy(&mut body_reader, &mut buffer)
+        .await
+        .unwrap();
+    assert_eq!(buffer.len(), 2);
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+async fn delete_file_success(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let id = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
+
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+    let result: Vec<FileItem> = client.get(uri).send().await.unwrap().json().await.unwrap();
+    let id = result[0].id;
+    let file_uri = format!("http://localhost:{}/api/file/{id}", ctx.port);
+
+    // Act
+    let result: Result<DeleteResult, reqwest::Error> =
+        client.delete(file_uri).send().await.unwrap().json().await;
+
+    // Assert
+    match result {
+        Ok(x) => {
+            assert_eq!(x.files, 1);
+        }
+        Err(e) => {
+            assert!(false, "delete file error: {}", e);
+        }
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+async fn delete_file_failure(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let id = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
+
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+    let id = 1111111;
+    let file_uri = format!("http://localhost:{}/api/file/{id}", ctx.port);
+
+    // Act
+    let response = client.delete(file_uri).send().await.unwrap();
+    let status = response.error_for_status();
+    
+    // Assert
+    match status {
+        Ok(_) => {
+            assert!(false, "Should be error but it wasn't");
+        }
+        Err(e) => {
+            assert_eq!(StatusCode::NOT_FOUND, e.status().unwrap());
         }
     }
 }
