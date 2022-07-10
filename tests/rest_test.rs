@@ -8,6 +8,7 @@ use bstore::sqlite::Sqlite;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Sender;
 use futures::TryStreamExt;
+use futures::future::join_all;
 use http::StatusCode;
 use rand::Rng;
 use reqwest::Client;
@@ -195,6 +196,43 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
         Err(e) => {
             assert!(false, "insert_many_from_form error: {}", e);
         }
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+async fn insert_many_from_form_concurrently(ctx: &mut BstoreAsyncContext) {
+    let mut handles = Vec::new();
+    for _number in 0..20 {
+        let port = ctx.port.clone();
+        let root = ctx.root.clone();
+        let task = tokio::spawn(async move {
+            // Arrange
+            let client = Client::new();
+            let id = Uuid::new_v4();
+            let uri = format!("http://localhost:{}/api/{id}", port);
+
+            let form = wrap_directory_into_multipart_form(&root).await.unwrap();
+
+            // Act
+            let result = client.post(uri).multipart(form).send().await;
+
+            // Assert
+            match result {
+                Ok(x) => {
+                    assert_eq!(x.status(), http::status::StatusCode::CREATED);
+                }
+                Err(e) => {
+                    assert!(false, "insert_many_from_form error: {}", e);
+                }
+            }
+        });
+        handles.push(task);
+    }
+
+    let results = join_all(handles).await;
+    for r in results {
+        assert!(r.is_ok());
     }
 }
 
@@ -389,7 +427,7 @@ async fn delete_file_failure(ctx: &mut BstoreAsyncContext) {
     // Act
     let response = client.delete(file_uri).send().await.unwrap();
     let status = response.error_for_status();
-    
+
     // Assert
     match status {
         Ok(_) => {
