@@ -27,8 +27,8 @@ use tokio::{fs::File, io::AsyncWriteExt, io::BufWriter};
 use tokio_util::io::ReaderStream;
 use tokio_util::io::StreamReader;
 use uuid::Uuid;
-use zip::write::FileOptions;
 use walkdir::{DirEntry as WDirEntry, WalkDir};
+use zip::write::FileOptions;
 
 const BSTORE_TEST_ROOT: &str = "bstore_test";
 const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
@@ -122,9 +122,6 @@ where
             f.read_to_end(&mut buffer)?;
             zip.write_all(&*buffer)?;
             buffer.clear();
-        } else if !name.as_os_str().is_empty() {
-            #[allow(deprecated)]
-            zip.add_directory_from_path(name, options)?;
         }
     }
     zip.finish()?;
@@ -280,16 +277,16 @@ async fn insert_one(ctx: &mut BstoreAsyncContext) {
 async fn insert_zip(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
-    let id = Uuid::new_v4();
+    let bucket_id = Uuid::new_v4();
 
-    let uri = format!("http://localhost:{}/api/{id}/zip", ctx.port);
+    let uri = format!("http://localhost:{}/api/{bucket_id}/zip", ctx.port);
 
     let dir_to_zip = ctx.root.to_str().unwrap();
     let walkdir = WalkDir::new(dir_to_zip);
     let it = walkdir.into_iter();
 
-    let file = ctx.root.join("test.zip");
-    let zip_file_path = &file.to_str().unwrap();
+    let file = ctx.root.join("..").join("test.zip");
+    let zip_file_path = file.to_str().unwrap();
     let error_message = format!("no such file {}", file.to_str().unwrap());
     let f = std::fs::File::create(zip_file_path).expect(&error_message);
 
@@ -300,7 +297,9 @@ async fn insert_zip(ctx: &mut BstoreAsyncContext) {
     let result = client.post(uri).body(file_stream).send().await;
 
     // Assert
-    tokio::fs::remove_file(zip_file_path).await.unwrap_or_default();
+    tokio::fs::remove_file(zip_file_path)
+        .await
+        .unwrap_or_default();
     match result {
         Ok(x) => {
             assert_eq!(x.status(), http::status::StatusCode::CREATED);
@@ -309,7 +308,9 @@ async fn insert_zip(ctx: &mut BstoreAsyncContext) {
             assert!(false, "insert_zip error: {}", e);
         }
     }
-    
+    let uri = format!("http://localhost:{}/api/{bucket_id}", ctx.port);
+    let result: Vec<FileItem> = client.get(uri).send().await.unwrap().json().await.unwrap();
+    assert_eq!(4, result.len());
 }
 
 #[test_context(BstoreAsyncContext)]
