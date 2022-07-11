@@ -14,7 +14,6 @@ use rand::Rng;
 use reqwest::Client;
 use std::fs::{self, DirEntry};
 use std::io;
-use std::io::Cursor;
 use std::io::Read;
 use std::io::Seek;
 use std::io::Write;
@@ -289,16 +288,19 @@ async fn insert_zip(ctx: &mut BstoreAsyncContext) {
     let walkdir = WalkDir::new(dir_to_zip);
     let it = walkdir.into_iter();
 
-    let zip = vec![];
-    let buff = Cursor::new(zip);
-    zip_dir(&mut it.filter_map(|e| e.ok()), dir_to_zip, buff).unwrap();
-    let cloned = vec![];
-    //cloned.copy_from_slice(zipped.by_ref());
+    let file = ctx.root.join("test.zip");
+    let zip_file_path = &file.to_str().unwrap();
+    let error_message = format!("no such file {}", file.to_str().unwrap());
+    let f = std::fs::File::create(zip_file_path).expect(&error_message);
+
+    zip_dir(&mut it.filter_map(|e| e.ok()), dir_to_zip, f).unwrap();
+    let file_stream = File::open(zip_file_path).await.unwrap();
 
     // Act
-    let result = client.post(uri).body(cloned).send().await;
+    let result = client.post(uri).body(file_stream).send().await;
 
     // Assert
+    tokio::fs::remove_file(zip_file_path).await.unwrap_or_default();
     match result {
         Ok(x) => {
             assert_eq!(x.status(), http::status::StatusCode::CREATED);
