@@ -27,7 +27,6 @@ use tokio::{fs::File, io::AsyncWriteExt, io::BufWriter};
 use tokio_util::io::ReaderStream;
 use tokio_util::io::StreamReader;
 use uuid::Uuid;
-use walkdir::{DirEntry as WDirEntry, WalkDir};
 use zip::write::FileOptions;
 
 const BSTORE_TEST_ROOT: &str = "bstore_test";
@@ -96,11 +95,7 @@ async fn wrap_directory_into_multipart_form<'a>(
     Ok(form)
 }
 
-fn zip_dir<T>(
-    it: &mut dyn Iterator<Item = WDirEntry>,
-    prefix: &str,
-    writer: T,
-) -> zip::result::ZipResult<()>
+fn zip_dir<T>(dir_to_zip: &Path, writer: T) -> zip::result::ZipResult<()>
 where
     T: Write + Seek,
 {
@@ -108,22 +103,22 @@ where
     let options = FileOptions::default().unix_permissions(0o755);
 
     let mut buffer = Vec::new();
-    for entry in it {
+
+    let mut handler = |entry: &DirEntry| {
         let path = entry.path();
-        let name = path.strip_prefix(Path::new(prefix)).unwrap();
+        let name = path.strip_prefix(dir_to_zip).unwrap();
 
-        // Write file or directory explicitly
-        // Some unzip tools unzip files with directory paths correctly, some do not!
-        if path.is_file() {
-            #[allow(deprecated)]
-            zip.start_file_from_path(name, options)?;
-            let mut f = std::fs::File::open(path)?;
+        #[allow(deprecated)]
+        zip.start_file_from_path(name, options).unwrap();
+        let mut f = std::fs::File::open(path).unwrap();
 
-            f.read_to_end(&mut buffer)?;
-            zip.write_all(&*buffer)?;
-            buffer.clear();
-        }
-    }
+        f.read_to_end(&mut buffer).unwrap();
+        zip.write_all(&*buffer).unwrap();
+        buffer.clear();
+    };
+
+    visit_dirs(dir_to_zip, &mut handler)?;
+
     zip.finish()?;
     Result::Ok(())
 }
@@ -281,16 +276,12 @@ async fn insert_zip(ctx: &mut BstoreAsyncContext) {
 
     let uri = format!("http://localhost:{}/api/{bucket_id}/zip", ctx.port);
 
-    let dir_to_zip = ctx.root.to_str().unwrap();
-    let walkdir = WalkDir::new(dir_to_zip);
-    let it = walkdir.into_iter();
-
     let file = ctx.root.join("..").join("test.zip");
     let zip_file_path = file.to_str().unwrap();
     let error_message = format!("no such file {}", file.to_str().unwrap());
     let f = std::fs::File::create(zip_file_path).expect(&error_message);
 
-    zip_dir(&mut it.filter_map(|e| e.ok()), dir_to_zip, f).unwrap();
+    zip_dir(ctx.root.as_path(), f).unwrap();
     let file_stream = File::open(zip_file_path).await.unwrap();
 
     // Act
