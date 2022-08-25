@@ -43,7 +43,7 @@ struct BstoreAsyncContext {
     join: JoinHandle<()>,
 }
 
-async fn create_file<'a>(f: PathBuf, content: &'a [u8]) {
+async fn create_file(f: PathBuf, content: &[u8]) {
     let error_message = format!("{}", f.to_str().unwrap());
     let f = File::create(f).await.expect(&error_message);
     {
