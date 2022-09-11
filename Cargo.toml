@@ -12,8 +12,8 @@ futures-util = "0.3"
 blake3 = "1.3"
 serde = { version = "1.0", features = ["derive"] }
 zip = "0.6.2"
-axum = { version = "0.5.15", features = ["multipart"] }
-tokio-util = { version = "0.7.3", features = ["full"] }
+axum = { version = "0.5.16", features = ["multipart"] }
+tokio-util = { version = "0.7.4", features = ["full"] }
 futures = "0.3"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing = "0.1"
