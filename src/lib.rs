@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 
 use axum::{
-    extract::Extension,
+    extract::{Extension, DefaultBodyLimit},
     routing::post,
     routing::{delete, get},
     Router,
 };
 use std::time::Duration;
 use tower::ServiceBuilder;
-use tower_http::{classify::ServerErrorsFailureClass, trace::TraceLayer};
+use tower_http::{classify::ServerErrorsFailureClass, trace::TraceLayer, limit::RequestBodyLimitLayer};
 use tracing::Span;
 use tokio::signal;
 
@@ -48,6 +48,10 @@ pub fn create_routes(db: PathBuf) -> Router {
                     },
                 ))
                 .layer(Extension(db))
+                .layer(DefaultBodyLimit::disable())
+                .layer(RequestBodyLimitLayer::new(
+                    2 * 1024 * 1024 * 1024 /* 2GB */
+                ))
                 .into_inner(),
         )
 }

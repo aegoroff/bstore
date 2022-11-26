@@ -14,19 +14,14 @@ use std::path::PathBuf;
 use tokio_util::io::StreamReader;
 
 use axum::{
-    extract::{ContentLengthLimit, Extension, Multipart, Path},
+    extract::{Extension, Multipart, Path},
     http::StatusCode,
 };
 
 pub async fn insert_many_from_form(
     Path(bucket): Path<String>,
-    ContentLengthLimit(mut multipart): ContentLengthLimit<
-        Multipart,
-        {
-            2 * 1024 * 1024 * 1024 /* 2GB */
-        },
-    >,
     Extension(db): Extension<PathBuf>,
+    mut multipart: Multipart,
 ) -> impl IntoResponse {
     let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
         Ok(s) => s,
@@ -49,8 +44,8 @@ pub async fn insert_many_from_form(
 
 pub async fn insert_file_or_zipped_bucket(
     Path((bucket, file_name)): Path<(String, String)>,
-    body: BodyStream,
     Extension(db): Extension<PathBuf>,
+    body: BodyStream,
 ) -> Result<impl IntoResponse, String> {
     let (result, read_bytes) = read_from_stream(body).await;
 
