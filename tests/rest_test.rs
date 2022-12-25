@@ -240,8 +240,8 @@ impl AsyncTestContext for BstoreAsyncContext {
 async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
-    let id = Uuid::new_v4();
-    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
 
     let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
@@ -265,13 +265,13 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
 async fn insert_one(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
-    let id = Uuid::new_v4();
+    let bucket = Uuid::new_v4();
 
     let file = ctx.root.join("d1").join("f1");
     let file_path = &file.to_str().unwrap();
 
     let file_url = url_escape::encode_component(file_path);
-    let uri = format!("http://localhost:{}/api/{id}/{file_url}", ctx.port);
+    let uri = format!("http://localhost:{}/api/{bucket}/{file_url}", ctx.port);
 
     let error_message = format!("no such file {}", file.to_str().unwrap());
     let f = File::open(file).await.expect(&error_message);
@@ -298,9 +298,9 @@ async fn insert_one(ctx: &mut BstoreAsyncContext) {
 async fn insert_zip(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
-    let bucket_id = Uuid::new_v4();
+    let bucket = Uuid::new_v4();
 
-    let uri = format!("http://localhost:{}/api/{bucket_id}/zip", ctx.port);
+    let uri = format!("http://localhost:{}/api/{bucket}/zip", ctx.port);
 
     let file = ctx.root.parent().unwrap().join("test.zip");
     let zip_file_path = file.to_str().unwrap();
@@ -326,7 +326,7 @@ async fn insert_zip(ctx: &mut BstoreAsyncContext) {
             assert!(false, "insert_zip error: {}", e);
         }
     }
-    let uri = format!("http://localhost:{}/api/{bucket_id}", ctx.port);
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
     let result: Vec<FileItem> = client.get(uri).send().await.unwrap().json().await.unwrap();
     assert_eq!(4, result.len());
 }
@@ -374,8 +374,8 @@ async fn insert_many_from_form_concurrently(ctx: &mut BstoreAsyncContext) {
 async fn delete_bucket_and_all_blobls(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
-    let id = Uuid::new_v4();
-    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
 
     let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
@@ -403,10 +403,10 @@ async fn delete_bucket_and_all_blobls(ctx: &mut BstoreAsyncContext) {
 async fn delete_bucket_but_keep_blobls(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
-    let id1 = Uuid::new_v4();
-    let id2 = Uuid::new_v4();
-    let bucket1 = format!("http://localhost:{}/api/{id1}", ctx.port);
-    let bucket2 = format!("http://localhost:{}/api/{id2}", ctx.port);
+    let bucket1 = Uuid::new_v4();
+    let bucket2 = Uuid::new_v4();
+    let bucket1 = format!("http://localhost:{}/api/{bucket1}", ctx.port);
+    let bucket2 = format!("http://localhost:{}/api/{bucket2}", ctx.port);
 
     let form1 = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
     let form2 = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
@@ -436,8 +436,8 @@ async fn delete_bucket_but_keep_blobls(ctx: &mut BstoreAsyncContext) {
 async fn get_bucket_files(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
-    let id = Uuid::new_v4();
-    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
 
     let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
@@ -464,8 +464,8 @@ async fn get_bucket_files(ctx: &mut BstoreAsyncContext) {
 async fn get_buckets(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
-    let id = Uuid::new_v4();
-    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
 
     let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
@@ -493,15 +493,15 @@ async fn get_buckets(ctx: &mut BstoreAsyncContext) {
 async fn get_file_content(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
-    let id = Uuid::new_v4();
-    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
 
     let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
     client.post(&uri).multipart(form).send().await.unwrap();
     let result: Vec<FileItem> = client.get(uri).send().await.unwrap().json().await.unwrap();
-    let id = result[0].id;
-    let file_uri = format!("http://localhost:{}/api/file/{id}", ctx.port);
+    let file_id = result[0].id;
+    let file_uri = format!("http://localhost:{}/api/file/{file_id}", ctx.port);
 
     // Act
     let result = client.get(file_uri).send().await.unwrap().bytes_stream();
@@ -523,15 +523,15 @@ async fn get_file_content(ctx: &mut BstoreAsyncContext) {
 async fn delete_file_success(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
-    let id = Uuid::new_v4();
-    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
 
     let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
     client.post(&uri).multipart(form).send().await.unwrap();
     let result: Vec<FileItem> = client.get(uri).send().await.unwrap().json().await.unwrap();
-    let id = result[0].id;
-    let file_uri = format!("http://localhost:{}/api/file/{id}", ctx.port);
+    let file_id = result[0].id;
+    let file_uri = format!("http://localhost:{}/api/file/{file_id}", ctx.port);
 
     // Act
     let result: Result<DeleteResult, reqwest::Error> =
@@ -554,14 +554,14 @@ async fn delete_file_success(ctx: &mut BstoreAsyncContext) {
 async fn delete_file_failure(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
-    let id = Uuid::new_v4();
-    let uri = format!("http://localhost:{}/api/{id}", ctx.port);
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
 
     let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
     client.post(&uri).multipart(form).send().await.unwrap();
-    let id = 1111111;
-    let file_uri = format!("http://localhost:{}/api/file/{id}", ctx.port);
+    let file_id = 1111111;
+    let file_uri = format!("http://localhost:{}/api/file/{file_id}", ctx.port);
 
     // Act
     let response = client.delete(file_uri).send().await.unwrap();
