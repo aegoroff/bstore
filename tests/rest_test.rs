@@ -168,10 +168,12 @@ impl AsyncTestContext for BstoreAsyncContext {
         tokio::fs::create_dir_all(d1).await.unwrap();
         tokio::fs::create_dir_all(d2).await.unwrap();
 
-        create_file(f1, b"f1").await;
-        create_file(f2, b"f2").await;
-        create_file(f3, b"f3").await;
-        create_file(f4, b"f4").await;
+        let fh1 = create_file(f1, b"f1");
+        let fh2 = create_file(f2, b"f2");
+        let fh3 = create_file(f3, b"f3");
+        let fh4 = create_file(f4, b"f4");
+
+        join_all(vec![fh1, fh2, fh3, fh4]).await;
 
         let db_file: String = (10..DB_LEN)
             .map(|_| {
