@@ -243,7 +243,7 @@ impl Sqlite {
     }
 
     fn pragma_update(&self, name: &str, value: &str) -> Result<(), Error> {
-        self.conn.pragma_update(None, name, &value)
+        self.conn.pragma_update(None, name, value)
     }
 
     fn cleanup_blobs(tx: &Transaction) -> Result<usize, Error> {
