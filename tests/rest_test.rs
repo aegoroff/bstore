@@ -12,15 +12,16 @@ use futures::TryStreamExt;
 use http::StatusCode;
 use rand::Rng;
 use reqwest::Client;
+use serial_test::serial;
 use std::fs::{self, DirEntry};
 use std::io;
 use std::io::Read;
 use std::io::Seek;
 use std::io::Write;
 use std::net::SocketAddr;
+use std::net::TcpListener;
 use std::path::Path;
 use std::{env, path::PathBuf};
-use std::{thread, time};
 use test_context::{test_context, AsyncTestContext};
 use tokio::task::JoinHandle;
 use tokio::{fs::File, io::AsyncWriteExt, io::BufWriter};
@@ -123,6 +124,22 @@ where
     Result::Ok(())
 }
 
+fn get_available_port() -> Option<u16> {
+    loop {
+        let port = rand::thread_rng().gen_range(8000..9000);
+        if port_is_available(port) {
+            return Some(port);
+        }
+    }
+}
+
+fn port_is_available(port: u16) -> bool {
+    match TcpListener::bind(("0.0.0.0", port)) {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}
+
 impl BstoreAsyncContext {
     async fn remove_db(db_path: PathBuf) {
         tokio::fs::remove_file(db_path.clone())
@@ -173,7 +190,13 @@ impl AsyncTestContext for BstoreAsyncContext {
             .new_database()
             .unwrap();
 
-        let port = rand::thread_rng().gen_range(5000..5500);
+        let mut port = 0;
+
+        if let Some(available_port) = get_available_port() {
+            println!("port `{}` is available", available_port);
+            port = available_port;
+        }
+
         let port = port.to_string();
 
         let (send, recv) = oneshot::channel::<()>();
@@ -206,13 +229,12 @@ impl AsyncTestContext for BstoreAsyncContext {
         tokio::fs::remove_dir_all(self.root)
             .await
             .unwrap_or_default();
-        let timeout = time::Duration::from_millis(200);
-        thread::sleep(timeout);
     }
 }
 
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
+#[serial]
 async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
@@ -237,6 +259,7 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
 
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
+#[serial]
 async fn insert_one(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
@@ -269,6 +292,7 @@ async fn insert_one(ctx: &mut BstoreAsyncContext) {
 
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
+#[serial]
 async fn insert_zip(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
@@ -276,8 +300,9 @@ async fn insert_zip(ctx: &mut BstoreAsyncContext) {
 
     let uri = format!("http://localhost:{}/api/{bucket_id}/zip", ctx.port);
 
-    let file = ctx.root.join("..").join("test.zip");
+    let file = ctx.root.parent().unwrap().join("test.zip");
     let zip_file_path = file.to_str().unwrap();
+
     let error_message = format!("no such file {}", file.to_str().unwrap());
     let f = std::fs::File::create(zip_file_path).expect(&error_message);
 
@@ -306,6 +331,7 @@ async fn insert_zip(ctx: &mut BstoreAsyncContext) {
 
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
+#[serial]
 async fn insert_many_from_form_concurrently(ctx: &mut BstoreAsyncContext) {
     let mut handles = Vec::new();
     for number in 0..20 {
@@ -342,6 +368,7 @@ async fn insert_many_from_form_concurrently(ctx: &mut BstoreAsyncContext) {
 
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
+#[serial]
 async fn delete_bucket_and_all_blobls(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
@@ -370,6 +397,7 @@ async fn delete_bucket_and_all_blobls(ctx: &mut BstoreAsyncContext) {
 
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
+#[serial]
 async fn delete_bucket_but_keep_blobls(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
@@ -402,6 +430,7 @@ async fn delete_bucket_but_keep_blobls(ctx: &mut BstoreAsyncContext) {
 
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
+#[serial]
 async fn get_bucket_files(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
@@ -429,6 +458,7 @@ async fn get_bucket_files(ctx: &mut BstoreAsyncContext) {
 
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
+#[serial]
 async fn get_buckets(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
@@ -457,6 +487,7 @@ async fn get_buckets(ctx: &mut BstoreAsyncContext) {
 
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
+#[serial]
 async fn get_file_content(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
@@ -486,6 +517,7 @@ async fn get_file_content(ctx: &mut BstoreAsyncContext) {
 
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
+#[serial]
 async fn delete_file_success(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
@@ -516,6 +548,7 @@ async fn delete_file_success(ctx: &mut BstoreAsyncContext) {
 
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
+#[serial]
 async fn delete_file_failure(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
