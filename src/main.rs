@@ -21,8 +21,13 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    // Configuration from environment
+    let db_file = env::var("BSTORE_DATA_FILE").unwrap_or_else(|_| String::from(DB_FILE));
     let dir = env::var("BSTORE_DATA_DIR").unwrap_or_else(|_| String::from(CURRENT_DIR));
-    let db = Path::new(&dir).join(DB_FILE);
+    let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
+
+    // Start init
+    let db = Path::new(&dir).join(&db_file);
     if !db.exists() {
         Sqlite::open(db.clone(), Mode::ReadWrite)
             .expect("Database file cannot be created")
@@ -30,7 +35,6 @@ async fn main() {
             .unwrap_or_default();
     }
 
-    let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
     let socket: SocketAddr = format!("0.0.0.0:{port}").parse().unwrap();
     tracing::debug!("listening on {socket}");
 
