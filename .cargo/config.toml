@@ -1,0 +1,19 @@
+# https://doc.rust-lang.org/cargo/reference/config.html
+
+#[build]
+# Get maximum performance with all CPU features of the CPU that compiles this.
+# See: https://stackoverflow.com/questions/65156743/what-target-features-uses-rustc-by-default
+# I'm not sure if this affects crates that use this as library.
+#rustflags = [
+    #"-C",
+    # without this, Rustc uses only CPU features "fxsr,sse,sse2".
+    # "native" activates all fancy CPU features of the CPU that compiles this but the
+    # binary probalby not run on older Intel micro architectures.
+    #"target-feature=+crt-static",
+#]
+
+[target.'cfg(target_os = "linux")']
+rustflags = ["-Clink-arg=-fuse-ld=lld", "-Ctarget-cpu=native"]
+
+[unstable]
+rustflags = ["-Zsanitizer=leak", "-Clink-arg=-fuse-ld=lld"]
