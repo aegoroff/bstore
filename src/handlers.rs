@@ -32,7 +32,7 @@ pub async fn insert_many_from_form(
     };
 
     tracing::info!("create bucket: {bucket}");
-    while let Some(field) = multipart.next_field().await.unwrap() {
+    while let Ok(Some(field)) = multipart.next_field().await {
         let file_name = field.file_name().unwrap_or_default().to_string();
         let (result, read_bytes) = read_from_stream(field).await;
         let insert_result = repository.insert_file(&file_name, &bucket, result);
@@ -157,16 +157,22 @@ pub async fn get_file_content(
     Extension(db): Extension<PathBuf>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadOnly, move |mut repository| {
-        let info = repository.get_file_info(id).unwrap();
+        let info = match repository.get_file_info(id) {
+            Ok(f) => f,
+            Err(e) => return Err(e.to_string()),
+        };
 
-        let mut rdr = repository.get_file_data(id).unwrap();
+        let mut rdr = match repository.get_file_data(id) {
+            Ok(r) => r,
+            Err(e) => return Err(e.to_string()),
+        };
 
         // NOTE: Find way to pass raw Read to stream
         let mut content = Vec::<u8>::with_capacity(info.size);
         let size = rdr.read_to_end(&mut content).unwrap_or_default();
         tracing::info!("File size {}", size);
 
-        FileReply::new(content, info)
+        Ok(FileReply::new(content, info))
     })
 }
 
@@ -251,10 +257,11 @@ where
         futures::pin_mut!(body_reader);
         let mut buffer = Vec::new();
 
-        read_bytes += tokio::io::copy(&mut body_reader, &mut buffer)
-            .await
-            .unwrap() as usize;
-        result.append(&mut buffer);
+
+        if let Ok(copied_bytes) = tokio::io::copy(&mut body_reader, &mut buffer).await {
+            read_bytes += copied_bytes as usize;
+            result.append(&mut buffer);
+        }
     }
     .await;
     (result, read_bytes)
