@@ -11,6 +11,7 @@ use futures_util::StreamExt;
 use std::fmt::Display;
 use std::io::{self, Cursor};
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio_util::io::StreamReader;
 
 use axum::{
@@ -20,10 +21,10 @@ use axum::{
 
 pub async fn insert_many_from_form(
     Path(bucket): Path<String>,
-    Extension(db): Extension<PathBuf>,
+    Extension(db): Extension<Arc<PathBuf>>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let mut repository = match Sqlite::open(db, Mode::ReadWrite) {
+    let mut repository = match Sqlite::open(db.as_path(), Mode::ReadWrite) {
         Ok(s) => s,
         Err(e) => {
             tracing::error!("{e}");
@@ -44,7 +45,7 @@ pub async fn insert_many_from_form(
 
 pub async fn insert_file_or_zipped_bucket(
     Path((bucket, file_name)): Path<(String, String)>,
-    Extension(db): Extension<PathBuf>,
+    Extension(db): Extension<Arc<PathBuf>>,
     body: BodyStream,
 ) -> Result<impl IntoResponse, String> {
     let (result, read_bytes) = read_from_stream(body).await;
@@ -101,7 +102,7 @@ pub async fn insert_file_or_zipped_bucket(
 
 pub async fn delete_bucket(
     Path(bucket): Path<String>,
-    Extension(db): Extension<PathBuf>,
+    Extension(db): Extension<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadWrite, move |mut repository| {
         let delete_result = repository.delete_bucket(&bucket);
@@ -130,7 +131,9 @@ pub async fn delete_bucket(
     })
 }
 
-pub async fn get_buckets(Extension(db): Extension<PathBuf>) -> Result<impl IntoResponse, String> {
+pub async fn get_buckets(
+    Extension(db): Extension<Arc<PathBuf>>,
+) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadOnly, move |mut repository| {
         let result = repository.get_buckets().unwrap_or_default();
         Json(result)
@@ -139,7 +142,7 @@ pub async fn get_buckets(Extension(db): Extension<PathBuf>) -> Result<impl IntoR
 
 pub async fn get_files(
     Path(bucket): Path<String>,
-    Extension(db): Extension<PathBuf>,
+    Extension(db): Extension<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadOnly, move |mut repository| {
         let result = repository.get_files(&bucket).unwrap_or_default();
@@ -154,7 +157,7 @@ pub async fn get_files(
 
 pub async fn get_file_content(
     Path(id): Path<i64>,
-    Extension(db): Extension<PathBuf>,
+    Extension(db): Extension<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadOnly, move |mut repository| {
         let info = match repository.get_file_info(id) {
@@ -178,7 +181,7 @@ pub async fn get_file_content(
 
 pub async fn delete_file(
     Path(id): Path<i64>,
-    Extension(db): Extension<PathBuf>,
+    Extension(db): Extension<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadWrite, move |mut repository| {
         let delete_result = repository.delete_file(id);
@@ -207,12 +210,12 @@ pub async fn delete_file(
     })
 }
 
-fn execute<F, R>(db: PathBuf, mode: Mode, action: F) -> Result<impl IntoResponse, String>
+fn execute<F, R>(db: Arc<PathBuf>, mode: Mode, action: F) -> Result<impl IntoResponse, String>
 where
     F: FnOnce(Sqlite) -> R,
     R: IntoResponse,
 {
-    match Sqlite::open(db, mode) {
+    match Sqlite::open(db.as_path(), mode) {
         Ok(s) => Ok(action(s)),
         Err(e) => {
             tracing::error!("{e}");
@@ -256,7 +259,6 @@ where
         let body_reader = StreamReader::new(body_with_io_error);
         futures::pin_mut!(body_reader);
         let mut buffer = Vec::new();
-
 
         if let Ok(copied_bytes) = tokio::io::copy(&mut body_reader, &mut buffer).await {
             read_bytes += copied_bytes as usize;

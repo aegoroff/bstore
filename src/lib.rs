@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use axum::{
     extract::{Extension, DefaultBodyLimit},
@@ -47,7 +47,7 @@ pub fn create_routes(db: PathBuf) -> Router {
                         tracing::error!("Server error: {error}");
                     },
                 ))
-                .layer(Extension(db))
+                .layer(Extension(Arc::new(db)))
                 .layer(DefaultBodyLimit::disable())
                 .layer(RequestBodyLimitLayer::new(
                     2 * 1024 * 1024 * 1024 /* 2GB */
