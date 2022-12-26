@@ -199,6 +199,26 @@ impl Storage for Sqlite {
         Ok(result)
     }
 
+    fn search_file_info(&mut self, bucket: &str, path: &str) -> Result<File, Self::Err> {
+        self.enable_foreign_keys()?;
+        self.set_synchronous_full()?;
+
+        let mut stmt = self.conn.prepare("SELECT file.id, file.path, file.bucket, blob.size \
+                                                       FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
+                                                       WHERE bucket = ?1 AND path = ?2")?;
+        let result: File = stmt.query_row([bucket, path], |r| {
+            Ok(File {
+                id: r.get(0)?,
+                path: r.get(1)?,
+                bucket: r.get(2)?,
+                size: r.get(3)?,
+            })
+        })?;
+        stmt.finalize()?;
+
+        Ok(result)
+    }
+
     fn delete_file(&mut self, id: i64) -> Result<DeleteResult, Self::Err> {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;

@@ -39,6 +39,7 @@ uuid = { version = "1.2.1", features = [
 rand = "0.8.5"
 url-escape = "0.1.1"
 serial_test = "0.10.0"
+urlencoding = "2.1.2"
 
 [profile.release]
 lto = 'fat'

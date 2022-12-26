@@ -13,6 +13,7 @@ use http::StatusCode;
 use rand::Rng;
 use reqwest::Client;
 use serial_test::serial;
+use urlencoding::encode;
 use std::fs::{self, DirEntry};
 use std::io;
 use std::io::Read;
@@ -502,6 +503,35 @@ async fn get_file_content(ctx: &mut BstoreAsyncContext) {
     let result: Vec<FileItem> = client.get(uri).send().await.unwrap().json().await.unwrap();
     let file_id = result[0].id;
     let file_uri = format!("http://localhost:{}/api/file/{file_id}", ctx.port);
+
+    // Act
+    let result = client.get(file_uri).send().await.unwrap().bytes_stream();
+
+    // Assert
+    let body_with_io_error = result.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
+    let body_reader = StreamReader::new(body_with_io_error);
+    futures::pin_mut!(body_reader);
+    let mut buffer = Vec::new();
+    tokio::io::copy(&mut body_reader, &mut buffer)
+        .await
+        .unwrap();
+    assert_eq!(buffer.len(), 2);
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
+async fn search_file_content(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
+
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+    let file_path = encode("d1/f1");
+    let file_uri = format!("http://localhost:{}/api/{bucket}/{file_path}", ctx.port);
 
     // Act
     let result = client.get(file_uri).send().await.unwrap().bytes_stream();

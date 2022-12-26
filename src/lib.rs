@@ -1,16 +1,18 @@
 use std::{path::PathBuf, sync::Arc};
 
 use axum::{
-    extract::{Extension, DefaultBodyLimit},
+    extract::{DefaultBodyLimit, Extension},
     routing::post,
     routing::{delete, get},
     Router,
 };
 use std::time::Duration;
-use tower::ServiceBuilder;
-use tower_http::{classify::ServerErrorsFailureClass, trace::TraceLayer, limit::RequestBodyLimitLayer};
-use tracing::Span;
 use tokio::signal;
+use tower::ServiceBuilder;
+use tower_http::{
+    classify::ServerErrorsFailureClass, limit::RequestBodyLimitLayer, trace::TraceLayer,
+};
+use tracing::Span;
 
 pub mod domain;
 pub mod file_reply;
@@ -34,7 +36,7 @@ pub fn create_routes(db: PathBuf) -> Router {
         )
         .route(
             "/api/:bucket/:file_name",
-            post(handlers::insert_file_or_zipped_bucket),
+            post(handlers::insert_file_or_zipped_bucket).get(handlers::search_and_get_file_content),
         )
         .route(
             "/api/file/:id",
@@ -50,12 +52,11 @@ pub fn create_routes(db: PathBuf) -> Router {
                 .layer(Extension(Arc::new(db)))
                 .layer(DefaultBodyLimit::disable())
                 .layer(RequestBodyLimitLayer::new(
-                    2 * 1024 * 1024 * 1024 /* 2GB */
+                    2 * 1024 * 1024 * 1024, /* 2GB */
                 ))
                 .into_inner(),
         )
 }
-
 
 pub async fn shutdown_signal() {
     let ctrl_c = async {

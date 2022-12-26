@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display};
 use std::io::Read;
 
 pub trait Storage {
-    type Err : Debug + Display;
+    type Err: Debug + Display;
 
     fn new_database(&self) -> Result<(), Self::Err>;
 
@@ -17,6 +17,8 @@ pub trait Storage {
     fn get_file_data(&self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err>;
 
     fn get_file_info(&mut self, id: i64) -> Result<File, Self::Err>;
+
+    fn search_file_info(&mut self, bucket: &str, path: &str) -> Result<File, Self::Err>;
 
     fn delete_file(&mut self, id: i64) -> Result<DeleteResult, Self::Err>;
 }
