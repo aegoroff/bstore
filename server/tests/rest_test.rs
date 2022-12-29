@@ -1,10 +1,10 @@
 use axum::Server;
-use bstore::domain::Bucket;
-use bstore::domain::DeleteResult;
-use bstore::domain::File as FileItem;
-use bstore::domain::Storage;
-use bstore::sqlite::Mode;
-use bstore::sqlite::Sqlite;
+use server::domain::Bucket;
+use server::domain::DeleteResult;
+use server::domain::File as FileItem;
+use server::domain::Storage;
+use server::sqlite::Mode;
+use server::sqlite::Sqlite;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Sender;
 use futures::future::join_all;
@@ -207,7 +207,7 @@ impl AsyncTestContext for BstoreAsyncContext {
         let cloned_db = db.clone();
         let cloned_port = port.clone();
         let task = tokio::spawn(async move {
-            let app = bstore::create_routes(cloned_db);
+            let app = server::create_routes(cloned_db);
             let socket: SocketAddr = format!("0.0.0.0:{cloned_port}").parse().unwrap();
             Server::bind(&socket)
                 .serve(app.into_make_service())

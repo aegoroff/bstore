@@ -1,0 +1,13 @@
+[package]
+name = "bstore"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+client = { path = "../client" }
+server = { path = "../server" }
+clap = { version = "4.0.32", features = ["std", "color", "suggestions", "cargo"] }
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }

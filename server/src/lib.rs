@@ -25,6 +25,54 @@ extern crate serde;
 #[cfg(test)] // <-- not needed in integration tests
 extern crate rstest;
 
+use axum::Server;
+use crate::domain::Storage;
+use crate::sqlite::{Mode, Sqlite};
+use std::env;
+use std::net::SocketAddr;
+use std::path::Path;
+
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+const DB_FILE: &str = "bstore.db";
+const CURRENT_DIR: &str = "./";
+
+extern crate tokio;
+
+pub async fn run() {
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::new(
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "bstore=debug".into()),
+        ))
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
+    // Configuration from environment
+    let db_file = env::var("BSTORE_DATA_FILE").unwrap_or_else(|_| String::from(DB_FILE));
+    let dir = env::var("BSTORE_DATA_DIR").unwrap_or_else(|_| String::from(CURRENT_DIR));
+    let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
+
+    // Start init
+    let db = Path::new(&dir).join(&db_file);
+    if !db.exists() {
+        Sqlite::open(db.clone(), Mode::ReadWrite)
+            .expect("Database file cannot be created")
+            .new_database()
+            .unwrap_or_default();
+    }
+
+    let socket: SocketAddr = format!("0.0.0.0:{port}").parse().unwrap();
+    tracing::debug!("listening on {socket}");
+
+    let app = create_routes(db);
+
+    Server::bind(&socket)
+        .serve(app.into_make_service())
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .unwrap();
+}
+
 pub fn create_routes(db: PathBuf) -> Router {
     Router::new()
         .route("/api/", get(handlers::get_buckets))
