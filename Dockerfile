@@ -4,8 +4,9 @@
 FROM rust:latest as rust-build
 RUN apt update && apt -y install lld
 COPY .cargo/ ./.cargo/
-COPY src/ ./src/
-COPY tests/ ./tests/
+COPY bstore/ ./bstore/
+COPY client/ ./client/
+COPY server/ ./server/
 COPY Cargo.toml ./
 RUN cargo test --workspace --release
 RUN cargo build --workspace --release
