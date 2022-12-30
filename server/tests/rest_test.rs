@@ -1,10 +1,4 @@
 use axum::Server;
-use server::domain::Bucket;
-use server::domain::DeleteResult;
-use server::domain::File as FileItem;
-use server::domain::Storage;
-use server::sqlite::Mode;
-use server::sqlite::Sqlite;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Sender;
 use futures::future::join_all;
@@ -13,7 +7,12 @@ use http::StatusCode;
 use rand::Rng;
 use reqwest::Client;
 use serial_test::serial;
-use urlencoding::encode;
+use server::domain::Bucket;
+use server::domain::DeleteResult;
+use server::domain::File as FileItem;
+use server::domain::Storage;
+use server::sqlite::Mode;
+use server::sqlite::Sqlite;
 use std::fs::{self, DirEntry};
 use std::io;
 use std::io::Read;
@@ -28,6 +27,7 @@ use tokio::task::JoinHandle;
 use tokio::{fs::File, io::AsyncWriteExt, io::BufWriter};
 use tokio_util::io::ReaderStream;
 use tokio_util::io::StreamReader;
+use urlencoding::encode;
 use uuid::Uuid;
 use zip::write::FileOptions;
 
@@ -581,6 +581,37 @@ async fn delete_file_success(ctx: &mut BstoreAsyncContext) {
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
 #[serial]
+async fn search_and_delete_file_success(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
+
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+    let result: Vec<FileItem> = client.get(uri).send().await.unwrap().json().await.unwrap();
+    let file_path = encode(&result[0].path);
+    let file_uri = format!("http://localhost:{}/api/{bucket}/{file_path}", ctx.port);
+
+    // Act
+    let result: Result<DeleteResult, reqwest::Error> =
+        client.delete(file_uri).send().await.unwrap().json().await;
+
+    // Assert
+    match result {
+        Ok(x) => {
+            assert_eq!(x.files, 1);
+        }
+        Err(e) => {
+            assert!(false, "delete_file_success error: {}", e);
+        }
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
 async fn delete_file_failure(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
@@ -592,6 +623,35 @@ async fn delete_file_failure(ctx: &mut BstoreAsyncContext) {
     client.post(&uri).multipart(form).send().await.unwrap();
     let file_id = 1111111;
     let file_uri = format!("http://localhost:{}/api/file/{file_id}", ctx.port);
+
+    // Act
+    let response = client.delete(file_uri).send().await.unwrap();
+    let status = response.error_for_status();
+
+    // Assert
+    match status {
+        Ok(_) => {
+            assert!(false, "Should be error but it wasn't");
+        }
+        Err(e) => {
+            assert_eq!(StatusCode::NOT_FOUND, e.status().unwrap());
+        }
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
+async fn search_and_delete_file_failure(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
+
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+    let file_uri = format!("http://localhost:{}/api/{bucket}/DSDAS", ctx.port);
 
     // Act
     let response = client.delete(file_uri).send().await.unwrap();

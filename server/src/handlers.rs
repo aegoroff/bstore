@@ -244,11 +244,11 @@ pub async fn search_and_delete_file(
     Path((bucket, file_name)): Path<(String, String)>,
     Extension(db): Extension<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadOnly, move |mut repository| {
-        match repository.search_file_info(&bucket, &file_name) {
-            Ok(f) => delete_file!(repository, f.id),
-            Err(_e) => (StatusCode::NOT_FOUND, Json(DeleteResult::default())),
-        }
+    execute(db, Mode::ReadWrite, move |mut repository| match repository
+        .search_file_info(&bucket, &file_name)
+    {
+        Ok(f) => delete_file!(repository, f.id),
+        Err(_e) => (StatusCode::NOT_FOUND, Json(DeleteResult::default())),
     })
 }
 
