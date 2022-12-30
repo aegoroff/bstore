@@ -25,9 +25,9 @@ extern crate serde;
 #[cfg(test)] // <-- not needed in integration tests
 extern crate rstest;
 
-use axum::Server;
 use crate::domain::Storage;
 use crate::sqlite::{Mode, Sqlite};
+use axum::Server;
 use std::env;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -84,7 +84,9 @@ pub fn create_routes(db: PathBuf) -> Router {
         )
         .route(
             "/api/:bucket/:file_name",
-            post(handlers::insert_file_or_zipped_bucket).get(handlers::search_and_get_file_content),
+            post(handlers::insert_file_or_zipped_bucket)
+                .get(handlers::search_and_get_file_content)
+                .delete(handlers::search_and_delete_file),
         )
         .route(
             "/api/file/:id",

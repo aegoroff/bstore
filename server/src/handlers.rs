@@ -203,24 +203,21 @@ pub async fn search_and_get_file_content(
     })
 }
 
-pub async fn delete_file(
-    Path(id): Path<i64>,
-    Extension(db): Extension<Arc<PathBuf>>,
-) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadWrite, move |mut repository| {
-        let delete_result = repository.delete_file(id);
+macro_rules! delete_file {
+    ($repository:ident, $id:expr) => {{
+        let delete_result = $repository.delete_file($id);
         let result = match delete_result {
             Ok(deleted) => {
                 if deleted.files > 0 {
-                    tracing::info!("file: {} deleted", id);
+                    tracing::info!("file: {} deleted", $id);
                 } else {
-                    tracing::info!("file: {} not exist", id);
+                    tracing::info!("file: {} not exist", $id);
                 }
 
                 deleted
             }
             Err(e) => {
-                tracing::error!("file '{}' not deleted. Error: {}", id, e);
+                tracing::error!("file '{}' not deleted. Error: {}", $id, e);
                 DeleteResult::default()
             }
         };
@@ -231,6 +228,27 @@ pub async fn delete_file(
             StatusCode::OK
         };
         (status, Json(result))
+    }};
+}
+
+pub async fn delete_file(
+    Path(id): Path<i64>,
+    Extension(db): Extension<Arc<PathBuf>>,
+) -> Result<impl IntoResponse, String> {
+    execute(db, Mode::ReadWrite, move |mut repository| {
+        delete_file!(repository, id)
+    })
+}
+
+pub async fn search_and_delete_file(
+    Path((bucket, file_name)): Path<(String, String)>,
+    Extension(db): Extension<Arc<PathBuf>>,
+) -> Result<impl IntoResponse, String> {
+    execute(db, Mode::ReadOnly, move |mut repository| {
+        match repository.search_file_info(&bucket, &file_name) {
+            Ok(f) => delete_file!(repository, f.id),
+            Err(_e) => (StatusCode::NOT_FOUND, Json(DeleteResult::default())),
+        }
     })
 }
 
