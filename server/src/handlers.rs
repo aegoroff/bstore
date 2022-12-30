@@ -1,4 +1,3 @@
-use crate::domain::DeleteResult;
 use crate::domain::Storage;
 use crate::file_reply::FileReply;
 use crate::sqlite::{Mode, Sqlite};
@@ -8,6 +7,7 @@ use axum::response::IntoResponse;
 use axum::Json;
 use futures::{Stream, TryStreamExt};
 use futures_util::StreamExt;
+use kernel::DeleteResult;
 use std::fmt::Display;
 use std::io::{self, Cursor};
 use std::path::PathBuf;

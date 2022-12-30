@@ -1,9 +1,9 @@
-use crate::domain::File;
 use axum::{
     body::Full,
     http::HeaderValue,
     response::{IntoResponse, Response},
 };
+use kernel::File;
 
 pub struct FileReply {
     data: Vec<u8>,

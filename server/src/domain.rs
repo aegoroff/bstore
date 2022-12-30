@@ -1,6 +1,8 @@
 use std::fmt::{Debug, Display};
 use std::io::Read;
 
+use kernel::{Bucket, DeleteResult, File};
+
 pub trait Storage {
     type Err: Debug + Display;
 
@@ -21,24 +23,4 @@ pub trait Storage {
     fn search_file_info(&mut self, bucket: &str, path: &str) -> Result<File, Self::Err>;
 
     fn delete_file(&mut self, id: i64) -> Result<DeleteResult, Self::Err>;
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Bucket {
-    pub id: String,
-    pub files_count: i64,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct File {
-    pub id: i64,
-    pub path: String,
-    pub bucket: String,
-    pub size: usize,
-}
-
-#[derive(Serialize, Deserialize, Default)]
-pub struct DeleteResult {
-    pub files: usize,
-    pub blobs: usize,
 }

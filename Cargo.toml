@@ -3,6 +3,7 @@ members = [
   "bstore",
   "client",
   "server",
+  "kernel",
 ]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

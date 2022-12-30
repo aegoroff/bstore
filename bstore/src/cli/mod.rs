@@ -14,3 +14,9 @@ pub const INSERT_DESCRIPTION: &str = "Bstore insert file(s) into store";
 
 pub const FILE_SUBCOMMAND: &str = "file";
 pub const INSERT_FILE_DESCRIPTION: &str = "Insert single file into store";
+
+pub const LIST_SUBCOMMAND: &str = "list";
+pub const LIST_DESCRIPTION: &str = "List objects in bstore";
+
+pub const BUCKET_SUBCOMMAND: &str = "bucket";
+pub const BUCKET_LIST_DESCRIPTION: &str = "List buckets in bstore";

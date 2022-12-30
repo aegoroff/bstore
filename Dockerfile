@@ -7,6 +7,7 @@ COPY .cargo/ ./.cargo/
 COPY bstore/ ./bstore/
 COPY client/ ./client/
 COPY server/ ./server/
+COPY kernel/ ./kernel/
 COPY Cargo.toml ./
 RUN cargo test --workspace --release
 RUN cargo build --workspace --release

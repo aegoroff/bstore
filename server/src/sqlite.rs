@@ -1,10 +1,11 @@
 use std::io::{Read, Write};
 use std::path::Path;
 
+use kernel::{DeleteResult, Bucket, File};
 use rusqlite::blob::ZeroBlob;
 use rusqlite::{params, Connection, DatabaseName, Error, ErrorCode, OpenFlags, Transaction};
 
-use crate::domain::{Bucket, DeleteResult, File, Storage};
+use crate::domain::Storage;
 
 const CACHE_SIZE: &str = "16384";
 

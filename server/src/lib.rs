@@ -19,7 +19,6 @@ pub mod file_reply;
 mod handlers;
 pub mod sqlite;
 
-#[macro_use]
 extern crate serde;
 
 #[cfg(test)] // <-- not needed in integration tests

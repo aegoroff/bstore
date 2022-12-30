@@ -1,5 +1,5 @@
 use clap::{arg, command, crate_name, Command};
-use cli::client::insert_single_file;
+use cli::client::{insert_single_file, list_buckets};
 use client::FileParams;
 
 mod cli;
@@ -30,6 +30,14 @@ async fn main() {
                         ),
                 ),
         )
+        .subcommand(
+            Command::new(cli::LIST_SUBCOMMAND)
+                .about(cli::LIST_DESCRIPTION)
+                .arg(arg!(-u --uri <URI>).required(true).help("Bstore URI"))
+                .subcommand(
+                    Command::new(cli::BUCKET_SUBCOMMAND).about(cli::BUCKET_LIST_DESCRIPTION),
+                ),
+        )
         .arg_required_else_help(true)
         .disable_version_flag(true)
         .get_matches();
@@ -49,6 +57,11 @@ async fn main() {
                 bucket: bucket.clone(),
             };
             insert_single_file(params).await;
+        }
+    } else if let Some(insert_matches) = cli.subcommand_matches(cli::LIST_SUBCOMMAND) {
+        let uri = insert_matches.get_one::<String>("uri").unwrap();
+        if insert_matches.subcommand_matches(cli::BUCKET_SUBCOMMAND).is_some() {
+            list_buckets(uri).await;
         }
     }
 }
