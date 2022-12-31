@@ -4,12 +4,12 @@ use futures::channel::oneshot::Sender;
 use futures::future::join_all;
 use futures::TryStreamExt;
 use http::StatusCode;
-use rand::Rng;
-use reqwest::Client;
-use serial_test::serial;
 use kernel::Bucket;
 use kernel::DeleteResult;
 use kernel::File as FileItem;
+use rand::Rng;
+use reqwest::Client;
+use serial_test::serial;
 use server::domain::Storage;
 use server::sqlite::Mode;
 use server::sqlite::Sqlite;
@@ -521,6 +521,37 @@ async fn get_file_content(ctx: &mut BstoreAsyncContext) {
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
 #[serial]
+async fn get_unexist_file_content(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
+
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+    let file_id = 30000;
+    let file_uri = format!("http://localhost:{}/api/file/{file_id}", ctx.port);
+
+    // Act
+    let result = client.get(file_uri).send().await.unwrap();
+
+    // Assert
+    let status = result.error_for_status();
+
+    match status {
+        Ok(_) => {
+            assert!(false, "Should be error but it wasn't");
+        }
+        Err(e) => {
+            assert_eq!(StatusCode::NOT_FOUND, e.status().unwrap());
+        }
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
 async fn search_file_content(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
@@ -545,6 +576,37 @@ async fn search_file_content(ctx: &mut BstoreAsyncContext) {
         .await
         .unwrap();
     assert_eq!(buffer.len(), 2);
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
+async fn search_unexist_file_content(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
+
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+    let file_path = "test";
+    let file_uri = format!("http://localhost:{}/api/{bucket}/{file_path}", ctx.port);
+
+    // Act
+    let result = client.get(file_uri).send().await.unwrap();
+
+    // Assert
+    let status = result.error_for_status();
+
+    match status {
+        Ok(_) => {
+            assert!(false, "Should be error but it wasn't");
+        }
+        Err(e) => {
+            assert_eq!(StatusCode::NOT_FOUND, e.status().unwrap());
+        }
+    }
 }
 
 #[test_context(BstoreAsyncContext)]

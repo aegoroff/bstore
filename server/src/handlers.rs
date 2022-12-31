@@ -1,7 +1,7 @@
 use crate::domain::Storage;
 use crate::file_reply::FileReply;
 use crate::sqlite::{Mode, Sqlite};
-use axum::body::Bytes;
+use axum::body::{Bytes, Empty};
 use axum::extract::BodyStream;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -91,12 +91,12 @@ pub async fn insert_file_or_zipped_bucket(
                 }
                 Err(e) => {
                     tracing::error!("{:#?}", e);
-                    return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+                    return Ok((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
                 }
             }
         }
 
-        (StatusCode::CREATED, String::default())
+        Ok((StatusCode::CREATED, String::default()))
     })
 }
 
@@ -127,7 +127,7 @@ pub async fn delete_bucket(
         } else {
             StatusCode::OK
         };
-        (status, Json(result))
+        Ok((status, Json(result)))
     })
 }
 
@@ -136,7 +136,7 @@ pub async fn get_buckets(
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadOnly, move |mut repository| {
         let result = repository.get_buckets().unwrap_or_default();
-        Json(result)
+        Ok(Json(result))
     })
 }
 
@@ -151,15 +151,15 @@ pub async fn get_files(
         } else {
             StatusCode::OK
         };
-        (status, Json(result))
+        Ok((status, Json(result)))
     })
 }
 
 pub async fn get_file_content(
     Path(id): Path<i64>,
     Extension(db): Extension<Arc<PathBuf>>,
-) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadOnly, move |mut repository| {
+) -> impl IntoResponse {
+    let result = execute(db, Mode::ReadOnly, move |mut repository| {
         let info = match repository.get_file_info(id) {
             Ok(f) => f,
             Err(e) => return Err(e.to_string()),
@@ -176,14 +176,18 @@ pub async fn get_file_content(
         tracing::info!("File size {}", size);
 
         Ok(FileReply::new(content, info))
-    })
+    });
+    match result {
+        Ok(response) => (StatusCode::OK, response.into_response()),
+        Err(_) => (StatusCode::NOT_FOUND, Empty::new().into_response()),
+    }
 }
 
 pub async fn search_and_get_file_content(
     Path((bucket, file_name)): Path<(String, String)>,
     Extension(db): Extension<Arc<PathBuf>>,
-) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadOnly, move |mut repository| {
+) -> impl IntoResponse {
+    let result = execute(db, Mode::ReadOnly, move |mut repository| {
         let info = match repository.search_file_info(&bucket, &file_name) {
             Ok(f) => f,
             Err(e) => return Err(e.to_string()),
@@ -200,7 +204,11 @@ pub async fn search_and_get_file_content(
         tracing::info!("File size {}", size);
 
         Ok(FileReply::new(content, info))
-    })
+    });
+    match result {
+        Ok(response) => (StatusCode::OK, response.into_response()),
+        Err(_) => (StatusCode::NOT_FOUND, Empty::new().into_response()),
+    }
 }
 
 macro_rules! delete_file {
@@ -227,7 +235,7 @@ macro_rules! delete_file {
         } else {
             StatusCode::OK
         };
-        (status, Json(result))
+        Ok((status, Json(result)))
     }};
 }
 
@@ -248,17 +256,17 @@ pub async fn search_and_delete_file(
         .search_file_info(&bucket, &file_name)
     {
         Ok(f) => delete_file!(repository, f.id),
-        Err(_e) => (StatusCode::NOT_FOUND, Json(DeleteResult::default())),
+        Err(_e) => Ok((StatusCode::NOT_FOUND, Json(DeleteResult::default()))),
     })
 }
 
 fn execute<F, R>(db: Arc<PathBuf>, mode: Mode, action: F) -> Result<impl IntoResponse, String>
 where
-    F: FnOnce(Sqlite) -> R,
+    F: FnOnce(Sqlite) -> Result<R, String>,
     R: IntoResponse,
 {
     match Sqlite::open(db.as_path(), mode) {
-        Ok(s) => Ok(action(s)),
+        Ok(s) => action(s),
         Err(e) => {
             tracing::error!("{e}");
             Err(e.to_string())
