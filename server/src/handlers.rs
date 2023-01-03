@@ -1,7 +1,7 @@
 use crate::domain::Storage;
 use crate::file_reply::FileReply;
 use crate::Database;
-use axum::body::{Bytes, Empty};
+use axum::body::Bytes;
 use axum::extract::BodyStream;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -154,7 +154,7 @@ pub async fn get_file_content(
         Ok(f) => f,
         Err(e) => {
             tracing::error!("Error: {e}");
-            return (StatusCode::NOT_FOUND, Empty::new().into_response());
+            return (StatusCode::NOT_FOUND, e.to_string().into_response());
         }
     };
 
@@ -162,7 +162,7 @@ pub async fn get_file_content(
         Ok(r) => r,
         Err(e) => {
             tracing::error!("Error: {e}");
-            return (StatusCode::NOT_FOUND, Empty::new().into_response());
+            return (StatusCode::NOT_FOUND, e.to_string().into_response());
         }
     };
 
@@ -187,7 +187,7 @@ pub async fn search_and_get_file_content(
         Ok(f) => f,
         Err(e) => {
             tracing::error!("Error: {e}");
-            return (StatusCode::NOT_FOUND, Empty::new().into_response());
+            return (StatusCode::NOT_FOUND, e.to_string().into_response());
         }
     };
 
@@ -195,7 +195,7 @@ pub async fn search_and_get_file_content(
         Ok(r) => r,
         Err(e) => {
             tracing::error!("Error: {e}");
-            return (StatusCode::NOT_FOUND, Empty::new().into_response());
+            return (StatusCode::NOT_FOUND, e.to_string().into_response());
         }
     };
 
