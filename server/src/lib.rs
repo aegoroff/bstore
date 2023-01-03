@@ -6,6 +6,7 @@ use axum::{
     routing::{delete, get},
     Router,
 };
+use futures::lock::Mutex;
 use std::time::Duration;
 use tokio::signal;
 use tower::ServiceBuilder;
@@ -37,6 +38,8 @@ const DB_FILE: &str = "bstore.db";
 const CURRENT_DIR: &str = "./";
 
 extern crate tokio;
+
+type Database = Arc<Mutex<Sqlite>>;
 
 pub async fn run() {
     tracing_subscriber::registry()
@@ -73,6 +76,8 @@ pub async fn run() {
 }
 
 pub fn create_routes(db: PathBuf) -> Router {
+    let storage = Sqlite::open(db, Mode::ReadWrite)
+    .expect("Database file cannot be created");
     Router::new()
         .route("/api/", get(handlers::get_buckets))
         .route(
@@ -98,7 +103,7 @@ pub fn create_routes(db: PathBuf) -> Router {
                         tracing::error!("Server error: {error}");
                     },
                 ))
-                .layer(Extension(Arc::new(db)))
+                .layer(Extension(Arc::new(Mutex::new(storage))))
                 .layer(DefaultBodyLimit::disable())
                 .layer(RequestBodyLimitLayer::new(
                     2 * 1024 * 1024 * 1024, /* 2GB */

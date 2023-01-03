@@ -1,6 +1,6 @@
 use crate::domain::Storage;
 use crate::file_reply::FileReply;
-use crate::sqlite::{Mode, Sqlite};
+use crate::Database;
 use axum::body::{Bytes, Empty};
 use axum::extract::BodyStream;
 use axum::response::IntoResponse;
@@ -10,8 +10,6 @@ use futures_util::StreamExt;
 use kernel::DeleteResult;
 use std::fmt::Display;
 use std::io::{self, Cursor};
-use std::path::PathBuf;
-use std::sync::Arc;
 use tokio_util::io::StreamReader;
 
 use axum::{
@@ -21,16 +19,10 @@ use axum::{
 
 pub async fn insert_many_from_form(
     Path(bucket): Path<String>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    Extension(storage): Extension<Database>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let mut repository = match Sqlite::open(db.as_path(), Mode::ReadWrite) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("{e}");
-            return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
-        }
-    };
+    let mut repository = storage.lock().await;
 
     tracing::info!("create bucket: {bucket}");
     while let Ok(Some(field)) = multipart.next_field().await {
@@ -45,170 +37,177 @@ pub async fn insert_many_from_form(
 
 pub async fn insert_file_or_zipped_bucket(
     Path((bucket, file_name)): Path<(String, String)>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    Extension(storage): Extension<Database>,
     body: BodyStream,
 ) -> Result<impl IntoResponse, String> {
     let (result, read_bytes) = read_from_stream(body).await;
 
-    execute(db, Mode::ReadWrite, move |mut repository| {
-        if file_name != "zip" {
-            // Plain file branch
-            let insert_result = repository.insert_file(&file_name, &bucket, result);
-            log_file_operation_result(insert_result, &file_name, read_bytes as u64);
-        } else {
-            // Zip archive branch
-            let buff = Cursor::new(result);
+    let mut repository = storage.lock().await;
 
-            let zip_result = zip::ZipArchive::new(buff);
+    if file_name != "zip" {
+        // Plain file branch
+        let insert_result = repository.insert_file(&file_name, &bucket, result);
+        log_file_operation_result(insert_result, &file_name, read_bytes as u64);
+    } else {
+        // Zip archive branch
+        let buff = Cursor::new(result);
 
-            match zip_result {
-                Ok(mut archive) => {
-                    for i in 0..archive.len() {
-                        match archive.by_index(i) {
-                            Ok(mut zip_file) => {
-                                let outpath = match zip_file.enclosed_name() {
-                                    Some(path) => path.to_owned(),
-                                    None => continue,
-                                };
-                                let outpath = match outpath.to_str() {
-                                    Some(p) => p,
-                                    None => continue,
-                                };
+        let zip_result = zip::ZipArchive::new(buff);
 
-                                let mut writer: Vec<u8> = vec![];
-                                let r = std::io::copy(&mut zip_file, &mut writer);
-                                if let Ok(r) = r {
-                                    let insert_result =
-                                        repository.insert_file(outpath, &bucket, writer);
-                                    log_file_operation_result(insert_result, outpath, r);
-                                }
+        match zip_result {
+            Ok(mut archive) => {
+                for i in 0..archive.len() {
+                    match archive.by_index(i) {
+                        Ok(mut zip_file) => {
+                            let outpath = match zip_file.enclosed_name() {
+                                Some(path) => path.to_owned(),
+                                None => continue,
+                            };
+                            let outpath = match outpath.to_str() {
+                                Some(p) => p,
+                                None => continue,
+                            };
+
+                            let mut writer: Vec<u8> = vec![];
+                            let r = std::io::copy(&mut zip_file, &mut writer);
+                            if let Ok(r) = r {
+                                let insert_result =
+                                    repository.insert_file(outpath, &bucket, writer);
+                                log_file_operation_result(insert_result, outpath, r);
                             }
-                            Err(e) => {
-                                tracing::error!("file not extracted. Error: {:#?}", e);
-                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("file not extracted. Error: {:#?}", e);
                         }
                     }
                 }
-                Err(e) => {
-                    tracing::error!("{:#?}", e);
-                    return Ok((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
-                }
+            }
+            Err(e) => {
+                tracing::error!("{:#?}", e);
+                return Ok((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
             }
         }
+    }
 
-        Ok((StatusCode::CREATED, String::default()))
-    })
+    Ok((StatusCode::CREATED, String::default()))
 }
 
 pub async fn delete_bucket(
     Path(bucket): Path<String>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    Extension(storage): Extension<Database>,
 ) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadWrite, move |mut repository| {
-        let delete_result = repository.delete_bucket(&bucket);
-        let result = match delete_result {
-            Ok(deleted) => {
-                tracing::info!(
-                    "bucket: {} deleted. The number of files removed {} blobs removed {}",
-                    &bucket,
-                    deleted.files,
-                    deleted.blobs
-                );
-                deleted
-            }
-            Err(e) => {
-                tracing::error!("bucket '{}' not deleted. Error: {}", &bucket, e);
-                DeleteResult::default()
-            }
-        };
+    let mut repository = storage.lock().await;
+    let delete_result = repository.delete_bucket(&bucket);
+    let result = match delete_result {
+        Ok(deleted) => {
+            tracing::info!(
+                "bucket: {} deleted. The number of files removed {} blobs removed {}",
+                &bucket,
+                deleted.files,
+                deleted.blobs
+            );
+            deleted
+        }
+        Err(e) => {
+            tracing::error!("bucket '{}' not deleted. Error: {}", &bucket, e);
+            DeleteResult::default()
+        }
+    };
 
-        let status = if result.files == 0 {
-            StatusCode::NOT_FOUND
-        } else {
-            StatusCode::OK
-        };
-        Ok((status, Json(result)))
-    })
+    let status = if result.files == 0 {
+        StatusCode::NOT_FOUND
+    } else {
+        StatusCode::OK
+    };
+    Ok((status, Json(result)))
 }
 
 pub async fn get_buckets(
-    Extension(db): Extension<Arc<PathBuf>>,
+    Extension(storage): Extension<Database>,
 ) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadOnly, move |mut repository| {
-        let result = repository.get_buckets().unwrap_or_default();
-        Ok(Json(result))
-    })
+    let mut repository = storage.lock().await;
+    let result = repository.get_buckets().unwrap_or_default();
+    Ok(Json(result))
 }
 
 pub async fn get_files(
     Path(bucket): Path<String>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    Extension(storage): Extension<Database>,
 ) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadOnly, move |mut repository| {
-        let result = repository.get_files(&bucket).unwrap_or_default();
-        let status = if result.is_empty() {
-            StatusCode::NOT_FOUND
-        } else {
-            StatusCode::OK
-        };
-        Ok((status, Json(result)))
-    })
+    let mut repository = storage.lock().await;
+    let result = repository.get_files(&bucket).unwrap_or_default();
+    let status = if result.is_empty() {
+        StatusCode::NOT_FOUND
+    } else {
+        StatusCode::OK
+    };
+    Ok((status, Json(result)))
 }
 
 pub async fn get_file_content(
     Path(id): Path<i64>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    Extension(storage): Extension<Database>,
 ) -> impl IntoResponse {
-    let result = execute(db, Mode::ReadOnly, move |mut repository| {
-        let info = match repository.get_file_info(id) {
-            Ok(f) => f,
-            Err(e) => return Err(e.to_string()),
-        };
+    let mut repository = storage.lock().await;
 
-        let mut rdr = match repository.get_file_data(id) {
-            Ok(r) => r,
-            Err(e) => return Err(e.to_string()),
-        };
+    let info = match repository.get_file_info(id) {
+        Ok(f) => f,
+        Err(e) => {
+            tracing::error!("Error: {e}");
+            return (StatusCode::NOT_FOUND, Empty::new().into_response());
+        }
+    };
 
-        // NOTE: Find way to pass raw Read to stream
-        let mut content = Vec::<u8>::with_capacity(info.size);
-        let size = rdr.read_to_end(&mut content).unwrap_or_default();
-        tracing::info!("File size {}", size);
+    let mut rdr = match repository.get_file_data(id) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!("Error: {e}");
+            return (StatusCode::NOT_FOUND, Empty::new().into_response());
+        }
+    };
 
-        Ok(FileReply::new(content, info))
-    });
-    match result {
-        Ok(response) => (StatusCode::OK, response.into_response()),
-        Err(_) => (StatusCode::NOT_FOUND, Empty::new().into_response()),
-    }
+    // NOTE: Find way to pass raw Read to stream
+    let mut content = Vec::<u8>::with_capacity(info.size);
+    let size = rdr.read_to_end(&mut content).unwrap_or_default();
+    tracing::info!("File size {}", size);
+
+    (
+        StatusCode::OK,
+        FileReply::new(content, info).into_response(),
+    )
 }
 
 pub async fn search_and_get_file_content(
     Path((bucket, file_name)): Path<(String, String)>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    Extension(storage): Extension<Database>,
 ) -> impl IntoResponse {
-    let result = execute(db, Mode::ReadOnly, move |mut repository| {
-        let info = match repository.search_file_info(&bucket, &file_name) {
-            Ok(f) => f,
-            Err(e) => return Err(e.to_string()),
-        };
+    let mut repository = storage.lock().await;
 
-        let mut rdr = match repository.get_file_data(info.id) {
-            Ok(r) => r,
-            Err(e) => return Err(e.to_string()),
-        };
+    let info = match repository.search_file_info(&bucket, &file_name) {
+        Ok(f) => f,
+        Err(e) => {
+            tracing::error!("Error: {e}");
+            return (StatusCode::NOT_FOUND, Empty::new().into_response());
+        }
+    };
 
-        // NOTE: Find way to pass raw Read to stream
-        let mut content = Vec::<u8>::with_capacity(info.size);
-        let size = rdr.read_to_end(&mut content).unwrap_or_default();
-        tracing::info!("File size {}", size);
+    let mut rdr = match repository.get_file_data(info.id) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!("Error: {e}");
+            return (StatusCode::NOT_FOUND, Empty::new().into_response());
+        }
+    };
 
-        Ok(FileReply::new(content, info))
-    });
-    match result {
-        Ok(response) => (StatusCode::OK, response.into_response()),
-        Err(_) => (StatusCode::NOT_FOUND, Empty::new().into_response()),
-    }
+    // NOTE: Find way to pass raw Read to stream
+    let mut content = Vec::<u8>::with_capacity(info.size);
+    let size = rdr.read_to_end(&mut content).unwrap_or_default();
+    tracing::info!("File size {}", size);
+
+    (
+        StatusCode::OK,
+        FileReply::new(content, info).into_response(),
+    )
 }
 
 macro_rules! delete_file {
@@ -241,36 +240,20 @@ macro_rules! delete_file {
 
 pub async fn delete_file(
     Path(id): Path<i64>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    Extension(storage): Extension<Database>,
 ) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadWrite, move |mut repository| {
-        delete_file!(repository, id)
-    })
+    let mut repository = storage.lock().await;
+    delete_file!(repository, id)
 }
 
 pub async fn search_and_delete_file(
     Path((bucket, file_name)): Path<(String, String)>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    Extension(storage): Extension<Database>,
 ) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadWrite, move |mut repository| match repository
-        .search_file_info(&bucket, &file_name)
-    {
+    let mut repository = storage.lock().await;
+    match repository.search_file_info(&bucket, &file_name) {
         Ok(f) => delete_file!(repository, f.id),
         Err(_e) => Ok((StatusCode::NOT_FOUND, Json(DeleteResult::default()))),
-    })
-}
-
-fn execute<F, R>(db: Arc<PathBuf>, mode: Mode, action: F) -> Result<impl IntoResponse, String>
-where
-    F: FnOnce(Sqlite) -> Result<R, String>,
-    R: IntoResponse,
-{
-    match Sqlite::open(db.as_path(), mode) {
-        Ok(s) => action(s),
-        Err(e) => {
-            tracing::error!("{e}");
-            Err(e.to_string())
-        }
     }
 }
 
