@@ -1,9 +1,9 @@
 use crate::domain::Storage;
 use crate::file_reply::FileReply;
 use crate::sqlite::{Mode, Sqlite};
-use axum::body::{Bytes, Empty};
+use axum::body::Bytes;
 use axum::extract::BodyStream;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::{Stream, TryStreamExt};
 use futures_util::StreamExt;
@@ -177,10 +177,7 @@ pub async fn get_file_content(
 
         Ok(FileReply::new(content, info))
     });
-    match result {
-        Ok(response) => (StatusCode::OK, response.into_response()),
-        Err(_) => (StatusCode::NOT_FOUND, Empty::new().into_response()),
-    }
+    make_response(result)
 }
 
 pub async fn search_and_get_file_content(
@@ -205,9 +202,16 @@ pub async fn search_and_get_file_content(
 
         Ok(FileReply::new(content, info))
     });
+    make_response(result)
+}
+
+fn make_response(result: Result<impl IntoResponse + Sized, String>) -> (StatusCode, Response) {
     match result {
         Ok(response) => (StatusCode::OK, response.into_response()),
-        Err(_) => (StatusCode::NOT_FOUND, Empty::new().into_response()),
+        Err(e) => {
+            tracing::error!("Error: {e}");
+            (StatusCode::NOT_FOUND, e.into_response())
+        }
     }
 }
 
@@ -298,7 +302,7 @@ async fn read_from_stream<S, E>(stream: S) -> (Vec<u8>, usize)
 where
     S: Stream<Item = Result<Bytes, E>>,
     S: StreamExt,
-    E: std::marker::Sync + std::error::Error + std::marker::Send + 'static,
+    E: Sync + std::error::Error + Send + 'static,
 {
     let mut result = Vec::new();
     let mut read_bytes = 0usize;
