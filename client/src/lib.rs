@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use comfy_table::{presets::UTF8_HORIZONTAL_ONLY, Attribute, Cell, ContentArrangement, Table};
 use kernel::Bucket;
 use reqwest::Client;
 use resource::Resource;
@@ -52,10 +53,21 @@ pub async fn list_buckets(uri: &str) {
     match client.get(resource.to_string()).send().await {
         Ok(response) => match response.json().await {
             Ok(r) => {
+                let mut table = Table::new();
+                table
+                    .load_preset(UTF8_HORIZONTAL_ONLY)
+                    .set_content_arrangement(ContentArrangement::Dynamic)
+                    .set_width(120)
+                    .set_header(vec![
+                        Cell::new("Bucket").add_attribute(Attribute::Bold),
+                        Cell::new("Files count").add_attribute(Attribute::Bold),
+                    ]);
+
                 let buckets: Vec<Bucket> = r;
                 for b in buckets {
-                    println!(" {} / {}", b.id, b.files_count);
+                    table.add_row(vec![Cell::new(b.id), Cell::new(b.files_count)]);
                 }
+                println!("{table}");
             }
             Err(e) => println!("JSON decode error: {e}"),
         },
