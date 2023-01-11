@@ -13,8 +13,5 @@ default-members = [
 ]
 
 [profile.release]
-lto = 'fat'
-debug = false
-debug-assertions = false
 codegen-units = 1
 strip = true
