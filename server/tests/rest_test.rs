@@ -296,6 +296,40 @@ async fn insert_one(ctx: &mut BstoreAsyncContext) {
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
 #[serial]
+async fn insert_one_that_zero_lengh(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let bucket = Uuid::new_v4();
+
+    let file = ctx.root.join("d1").join("f_z");
+    let file_path = &file.to_str().unwrap();
+    create_file(file.clone(), b"").await;
+
+    let file_url = url_escape::encode_component(file_path);
+    let uri = format!("http://localhost:{}/api/{bucket}/{file_url}", ctx.port);
+
+    let error_message = format!("no such file {}", file.to_str().unwrap());
+    let f = File::open(file).await.expect(&error_message);
+    let stream = ReaderStream::new(f);
+    let stream = reqwest::Body::wrap_stream(stream);
+
+    // Act
+    let result = client.post(uri).body(stream).send().await;
+
+    // Assert
+    match result {
+        Ok(x) => {
+            assert_eq!(x.status(), http::status::StatusCode::CREATED);
+        }
+        Err(e) => {
+            assert!(false, "insert_one error: {}", e);
+        }
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
 async fn insert_zip(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();
