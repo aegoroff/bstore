@@ -19,6 +19,18 @@ use axum::{
     http::StatusCode,
 };
 
+#[utoipa::path(
+    post,
+    path = "/api/{bucket}",
+    request_body = Multipart,
+    responses(
+        (status = 201, description = "Files created successfully", body = String),
+        (status = 500, description = "Server error", body = String)
+    ),
+    params(
+        ("bucket" = String, Path, description = "Bucket id")
+    ),
+)]
 pub async fn insert_many_from_form(
     Path(bucket): Path<String>,
     Extension(db): Extension<Arc<PathBuf>>,
@@ -43,6 +55,19 @@ pub async fn insert_many_from_form(
     (StatusCode::CREATED, String::default())
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/{bucket}/{file_name}",
+    request_body = BodyStream,
+    responses(
+        (status = 201, description = "File or many files added into bucket"),
+        (status = 500, description = "Server error", body = String)
+    ),
+    params(
+        ("bucket" = String, Path, description = "Bucket id"),
+        ("file_name" = String, Path, description = "File path inside bucket or zip string to insert many files from zip")
+    ),
+)]
 pub async fn insert_file_or_zipped_bucket(
     Path((bucket, file_name)): Path<(String, String)>,
     Extension(db): Extension<Arc<PathBuf>>,
@@ -100,6 +125,17 @@ pub async fn insert_file_or_zipped_bucket(
     })
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/{bucket}",
+    responses(
+        (status = 201, description = "Bucket with all files successfully deleted", body = DeleteResult),
+        (status = 404, description = "Bucket not found", body = DeleteResult)
+    ),
+    params(
+        ("bucket" = String, Path, description = "Bucket id")
+    ),
+)]
 pub async fn delete_bucket(
     Path(bucket): Path<String>,
     Extension(db): Extension<Arc<PathBuf>>,
@@ -131,6 +167,13 @@ pub async fn delete_bucket(
     })
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/",
+    responses(
+        (status = 200, description = "List all buckets successfully", body = [Bucket]),
+    ),
+)]
 pub async fn get_buckets(
     Extension(db): Extension<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
@@ -140,6 +183,17 @@ pub async fn get_buckets(
     })
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/{bucket}",
+    responses(
+        (status = 200, description = "Get all bucket's files successfully", body = [File]),
+        (status = 404, description = "Bucket not found", body = [File])
+    ),
+    params(
+        ("bucket" = String, Path, description = "Bucket id")
+    ),
+)]
 pub async fn get_files(
     Path(bucket): Path<String>,
     Extension(db): Extension<Arc<PathBuf>>,
@@ -155,6 +209,17 @@ pub async fn get_files(
     })
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/file/{id}",
+    responses(
+        (status = 200, description = "File content read"),
+        (status = 404, description = "File not found", body = String)
+    ),
+    params(
+        ("id" = i64, Path, description = "File id")
+    ),
+)]
 pub async fn get_file_content(
     Path(id): Path<i64>,
     Extension(db): Extension<Arc<PathBuf>>,
@@ -180,6 +245,18 @@ pub async fn get_file_content(
     make_response(result)
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/{bucket}/{file_name}",
+    responses(
+        (status = 200, description = "File content read"),
+        (status = 404, description = "File not found", body = String)
+    ),
+    params(
+        ("bucket" = String, Path, description = "Bucket id"),
+        ("file_name" = String, Path, description = "File path inside bucket")
+    ),
+)]
 pub async fn search_and_get_file_content(
     Path((bucket, file_name)): Path<(String, String)>,
     Extension(db): Extension<Arc<PathBuf>>,
@@ -243,6 +320,17 @@ macro_rules! delete_file {
     }};
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/file/{id}",
+    responses(
+        (status = 200, description = "File successfully deleted", body = DeleteResult),
+        (status = 404, description = "File not found", body = DeleteResult)
+    ),
+    params(
+        ("id" = i64, Path, description = "File id")
+    ),
+)]
 pub async fn delete_file(
     Path(id): Path<i64>,
     Extension(db): Extension<Arc<PathBuf>>,
@@ -252,6 +340,18 @@ pub async fn delete_file(
     })
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/{bucket}/{file_name}",
+    responses(
+        (status = 200, description = "File successfully deleted", body = DeleteResult),
+        (status = 404, description = "File not found", body = DeleteResult)
+    ),
+    params(
+        ("bucket" = String, Path, description = "Bucket id"),
+        ("file_name" = String, Path, description = "File path inside bucket")
+    ),
+)]
 pub async fn search_and_delete_file(
     Path((bucket, file_name)): Path<(String, String)>,
     Extension(db): Extension<Arc<PathBuf>>,

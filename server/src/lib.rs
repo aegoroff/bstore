@@ -31,6 +31,9 @@ use std::env;
 use std::net::SocketAddr;
 use std::path::Path;
 
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 const DB_FILE: &str = "bstore.db";
@@ -73,7 +76,30 @@ pub async fn run() {
 }
 
 pub fn create_routes(db: PathBuf) -> Router {
+    #[derive(OpenApi)]
+    #[openapi(
+        paths(
+            handlers::get_buckets,
+            handlers::insert_many_from_form,
+            handlers::insert_file_or_zipped_bucket,
+            handlers::delete_file,
+            handlers::delete_bucket,
+            handlers::get_files,
+            handlers::search_and_get_file_content,
+            handlers::search_and_delete_file,
+            handlers::get_file_content,
+        ),
+        components(
+            schemas(kernel::Bucket, kernel::File, kernel::DeleteResult)
+        ),
+        tags(
+            (name = "bstire", description = "Bstore API")
+        )
+    )]
+    struct ApiDoc;
+
     Router::new()
+        .merge(SwaggerUi::new("/swagger").url("/api-doc/openapi.json", ApiDoc::openapi()))
         .route("/api/", get(handlers::get_buckets))
         .route(
             "/api/:bucket",
