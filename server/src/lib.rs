@@ -24,7 +24,7 @@ extern crate serde;
 #[cfg(test)] // <-- not needed in integration tests
 extern crate rstest;
 
-use crate::domain::Storage;
+use crate::{domain::Storage, file_reply::FileReply};
 use crate::sqlite::{Mode, Sqlite};
 use axum::Server;
 use std::env;
@@ -90,7 +90,8 @@ pub fn create_routes(db: PathBuf) -> Router {
             handlers::get_file_content,
         ),
         components(
-            schemas(kernel::Bucket, kernel::File, kernel::DeleteResult)
+            schemas(kernel::Bucket, kernel::File, kernel::DeleteResult),
+            responses(FileReply),
         ),
         tags(
             (name = "bstore", description = "Bstore API")

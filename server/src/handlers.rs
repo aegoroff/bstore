@@ -211,7 +211,7 @@ pub async fn get_files(
     get,
     path = "/api/file/{id}",
     responses(
-        (status = 200, description = "File content read"),
+        (status = 200, response = FileReply),
         (status = 404, description = "File not found", body = String)
     ),
     params(
@@ -247,7 +247,7 @@ pub async fn get_file_content(
     get,
     path = "/api/{bucket}/{file_name}",
     responses(
-        (status = 200, description = "File content read"),
+        (status = 200, response = FileReply),
         (status = 404, description = "File not found", body = String)
     ),
     params(

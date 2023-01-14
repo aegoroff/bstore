@@ -4,6 +4,10 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use kernel::File;
+use utoipa::{
+    openapi::{self, content, Object, ResponseBuilder, SchemaType},
+    ToResponse,
+};
 
 pub struct FileReply {
     data: Vec<u8>,
@@ -46,6 +50,20 @@ impl IntoResponse for FileReply {
             HeaderValue::from_str(len.as_str()).unwrap(),
         );
         res
+    }
+}
+
+impl ToResponse for FileReply {
+    fn response() -> (String, openapi::Response) {
+        let object = Object::with_type(SchemaType::Object);
+        let content = content::Content::new(object);
+        (
+            "FileReply".to_string(),
+            ResponseBuilder::new()
+                .description("File content")
+                .content("application/octet-stream", content)
+                .build(),
+        )
     }
 }
 
