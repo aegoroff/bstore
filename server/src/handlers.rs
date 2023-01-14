@@ -22,7 +22,6 @@ use axum::{
 #[utoipa::path(
     post,
     path = "/api/{bucket}",
-    request_body = Multipart,
     responses(
         (status = 201, description = "Files created successfully", body = String),
         (status = 500, description = "Server error", body = String)
@@ -58,7 +57,6 @@ pub async fn insert_many_from_form(
 #[utoipa::path(
     post,
     path = "/api/{bucket}/{file_name}",
-    request_body = BodyStream,
     responses(
         (status = 201, description = "File or many files added into bucket"),
         (status = 500, description = "Server error", body = String)
