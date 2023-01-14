@@ -93,7 +93,7 @@ pub fn create_routes(db: PathBuf) -> Router {
             schemas(kernel::Bucket, kernel::File, kernel::DeleteResult)
         ),
         tags(
-            (name = "bstire", description = "Bstore API")
+            (name = "bstore", description = "Bstore API")
         )
     )]
     struct ApiDoc;
