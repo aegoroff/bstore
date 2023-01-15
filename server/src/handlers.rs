@@ -19,8 +19,6 @@ use axum::{
     http::StatusCode,
 };
 
-/// Add many files into bucket
-///
 /// Adds several files from multipart form into bucket.
 #[utoipa::path(
     post,
@@ -57,8 +55,6 @@ pub async fn insert_many_from_form(
     (StatusCode::CREATED, String::default())
 }
 
-/// Add single file or several files from zip into bucket
-///
 /// Adds single file or several files from zip into bucket. To add files from zip just post data with file name equal zip
 #[utoipa::path(
     post,
@@ -129,8 +125,6 @@ pub async fn insert_file_or_zipped_bucket(
     })
 }
 
-/// Delete bucket
-///
 /// Deletes whole bucket with all it's files
 #[utoipa::path(
     delete,
@@ -174,8 +168,6 @@ pub async fn delete_bucket(
     })
 }
 
-/// List buckets
-///
 /// Lists all buckets
 #[utoipa::path(
     get,
@@ -193,8 +185,6 @@ pub async fn get_buckets(
     })
 }
 
-/// List all bucket files
-///
 /// Lists all files from a bucket
 #[utoipa::path(
     get,
@@ -222,8 +212,6 @@ pub async fn get_files(
     })
 }
 
-/// Get file content by id
-///
 /// Gets file binary content by file id
 #[utoipa::path(
     get,
@@ -261,8 +249,6 @@ pub async fn get_file_content(
     make_response(result)
 }
 
-/// Get file content by bucket and path
-///
 /// Gets file binary content by bucket id and file path inside bucket
 #[utoipa::path(
     get,
@@ -339,8 +325,6 @@ macro_rules! delete_file {
     }};
 }
 
-/// Delete file by id
-///
 /// Deletes file by id
 #[utoipa::path(
     delete,
@@ -362,8 +346,6 @@ pub async fn delete_file(
     })
 }
 
-/// Delete file by bucket and path
-///
 /// Deletes file by bucket id and file path inside bucket
 #[utoipa::path(
     delete,
