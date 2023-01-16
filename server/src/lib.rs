@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use axum::{
-    extract::{DefaultBodyLimit, Extension},
+    extract::DefaultBodyLimit,
     routing::post,
     routing::{delete, get},
     Router,
@@ -24,8 +24,8 @@ extern crate serde;
 #[cfg(test)] // <-- not needed in integration tests
 extern crate rstest;
 
-use crate::{domain::Storage, file_reply::FileReply};
 use crate::sqlite::{Mode, Sqlite};
+use crate::{domain::Storage, file_reply::FileReply};
 use axum::Server;
 use std::env;
 use std::net::SocketAddr;
@@ -125,13 +125,13 @@ pub fn create_routes(db: PathBuf) -> Router {
                         tracing::error!("Server error: {error}");
                     },
                 ))
-                .layer(Extension(Arc::new(db)))
                 .layer(DefaultBodyLimit::disable())
                 .layer(RequestBodyLimitLayer::new(
                     2 * 1024 * 1024 * 1024, /* 2GB */
                 ))
                 .into_inner(),
         )
+        .with_state(Arc::new(db))
 }
 
 pub async fn shutdown_signal() {

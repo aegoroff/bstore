@@ -2,7 +2,7 @@ use crate::domain::Storage;
 use crate::file_reply::FileReply;
 use crate::sqlite::{Mode, Sqlite};
 use axum::body::Bytes;
-use axum::extract::BodyStream;
+use axum::extract::{BodyStream, State};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::{Stream, TryStreamExt};
@@ -15,7 +15,7 @@ use std::sync::Arc;
 use tokio_util::io::StreamReader;
 
 use axum::{
-    extract::{Extension, Multipart, Path},
+    extract::{Multipart, Path},
     http::StatusCode,
 };
 
@@ -33,7 +33,7 @@ use axum::{
 )]
 pub async fn insert_many_from_form(
     Path(bucket): Path<String>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    State(db): State<Arc<PathBuf>>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
     let mut repository = match Sqlite::open(db.as_path(), Mode::ReadWrite) {
@@ -70,7 +70,7 @@ pub async fn insert_many_from_form(
 )]
 pub async fn insert_file_or_zipped_bucket(
     Path((bucket, file_name)): Path<(String, String)>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    State(db): State<Arc<PathBuf>>,
     body: BodyStream,
 ) -> Result<impl IntoResponse, String> {
     let (result, read_bytes) = read_from_stream(body).await;
@@ -139,7 +139,7 @@ pub async fn insert_file_or_zipped_bucket(
 )]
 pub async fn delete_bucket(
     Path(bucket): Path<String>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    State(db): State<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadWrite, move |mut repository| {
         let delete_result = repository.delete_bucket(&bucket);
@@ -176,9 +176,7 @@ pub async fn delete_bucket(
         (status = 200, description = "List all buckets successfully", body = [Bucket]),
     ),
 )]
-pub async fn get_buckets(
-    Extension(db): Extension<Arc<PathBuf>>,
-) -> Result<impl IntoResponse, String> {
+pub async fn get_buckets(State(db): State<Arc<PathBuf>>) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadOnly, move |mut repository| {
         let result = repository.get_buckets().unwrap_or_default();
         Ok(Json(result))
@@ -199,7 +197,7 @@ pub async fn get_buckets(
 )]
 pub async fn get_files(
     Path(bucket): Path<String>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    State(db): State<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadOnly, move |mut repository| {
         let result = repository.get_files(&bucket).unwrap_or_default();
@@ -226,7 +224,7 @@ pub async fn get_files(
 )]
 pub async fn get_file_content(
     Path(id): Path<i64>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    State(db): State<Arc<PathBuf>>,
 ) -> impl IntoResponse {
     let result = execute(db, Mode::ReadOnly, move |mut repository| {
         let info = match repository.get_file_info(id) {
@@ -264,7 +262,7 @@ pub async fn get_file_content(
 )]
 pub async fn search_and_get_file_content(
     Path((bucket, file_name)): Path<(String, String)>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    State(db): State<Arc<PathBuf>>,
 ) -> impl IntoResponse {
     let result = execute(db, Mode::ReadOnly, move |mut repository| {
         let info = match repository.search_file_info(&bucket, &file_name) {
@@ -339,7 +337,7 @@ macro_rules! delete_file {
 )]
 pub async fn delete_file(
     Path(id): Path<i64>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    State(db): State<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadWrite, move |mut repository| {
         delete_file!(repository, id)
@@ -361,7 +359,7 @@ pub async fn delete_file(
 )]
 pub async fn search_and_delete_file(
     Path((bucket, file_name)): Path<(String, String)>,
-    Extension(db): Extension<Arc<PathBuf>>,
+    State(db): State<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
     execute(db, Mode::ReadWrite, move |mut repository| match repository
         .search_file_info(&bucket, &file_name)
