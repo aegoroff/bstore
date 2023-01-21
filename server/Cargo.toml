@@ -44,6 +44,6 @@ uuid = { version = "1.2.2", features = [
 ]}
 rand = "0.8.5"
 url-escape = "0.1.1"
-serial_test = "0.10.0"
+serial_test = "1.0.0"
 urlencoding = "2.1.2"
 
