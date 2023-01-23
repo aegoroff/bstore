@@ -100,12 +100,16 @@ pub async fn insert_file_or_zipped_bucket(
                                     None => continue,
                                 };
 
-                                let mut writer: Vec<u8> = vec![];
-                                let r = std::io::copy(&mut zip_file, &mut writer);
-                                if let Ok(r) = r {
-                                    let insert_result =
-                                        repository.insert_file(outpath, &bucket, writer);
-                                    log_file_operation_result(insert_result, outpath, r);
+                                let mut writer: Vec<u8> = Vec::with_capacity(zip_file.size() as usize);
+                                match std::io::copy(&mut zip_file, &mut writer) {
+                                    Ok(r) => {
+                                        let insert_result =
+                                            repository.insert_file(outpath, &bucket, writer);
+                                        log_file_operation_result(insert_result, outpath, r);
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Zip file copy error: {e}");
+                                    },
                                 }
                             }
                             Err(e) => {
