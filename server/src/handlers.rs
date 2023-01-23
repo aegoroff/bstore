@@ -409,7 +409,7 @@ where
     S: StreamExt,
     E: Sync + std::error::Error + Send + 'static,
 {
-    let (read_bytes, result) = async {
+    async {
         // Convert the stream into an `AsyncRead`.
         let body_with_io_error = stream.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
         let body_reader = StreamReader::new(body_with_io_error);
@@ -417,13 +417,12 @@ where
         let mut buffer = Vec::new();
 
         match tokio::io::copy(&mut body_reader, &mut buffer).await {
-            Ok(copied_bytes) => (copied_bytes as usize, buffer),
+            Ok(copied_bytes) => (buffer, copied_bytes as usize),
             Err(e) => {
                 tracing::error!("Reading from stream error. Error: {e}");
-                (0, buffer)
-            },
+                (buffer, 0)
+            }
         }
     }
-    .await;
-    (result, read_bytes)
+    .await
 }
