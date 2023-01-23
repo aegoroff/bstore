@@ -17,7 +17,6 @@ ENV BSTORE_PORT=5000
 ENV BSTORE_DATA_DIR=/data/data
 ENV BSTORE_DATA_FILE=bstore.db
 COPY --from=rust-build /target/release/bstore /usr/local/bin/bstore
-USER root
 ENTRYPOINT [ "/usr/local/bin/bstore" ]
 CMD [ "server" ]
 EXPOSE 5000
