@@ -5,7 +5,7 @@ use axum::{
 };
 use kernel::File;
 use utoipa::{
-    openapi::{self, content, Object, ResponseBuilder, SchemaType},
+    openapi::{self, content, Object, RefOr, ResponseBuilder, SchemaType},
     ToResponse,
 };
 
@@ -53,16 +53,17 @@ impl IntoResponse for FileReply {
     }
 }
 
-impl ToResponse for FileReply {
-    fn response() -> (String, openapi::Response) {
+impl ToResponse<'static> for FileReply {
+    fn response() -> (&'static str, RefOr<openapi::Response>) {
         let object = Object::with_type(SchemaType::Object);
         let content = content::Content::new(object);
         (
-            "FileReply".to_string(),
+            "FileReply",
             ResponseBuilder::new()
                 .description("File content")
                 .content("application/octet-stream", content)
-                .build(),
+                .build()
+                .into(),
         )
     }
 }

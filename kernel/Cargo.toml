@@ -8,4 +8,4 @@ license = "MIT"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-utoipa = "2.4.2"
+utoipa = { version = "3.0.0" }
