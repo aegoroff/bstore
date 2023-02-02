@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 use std::path::Path;
 
-use kernel::{DeleteResult, Bucket, File};
+use kernel::{Bucket, DeleteResult, File};
 use rusqlite::blob::ZeroBlob;
 use rusqlite::{params, Connection, DatabaseName, Error, ErrorCode, OpenFlags, Transaction};
 
@@ -52,7 +52,7 @@ impl Storage for Sqlite {
         Ok(())
     }
 
-    fn insert_file(&mut self, path: &str, bucket: &str, data: Vec<u8>) -> Result<usize, Self::Err> {
+    fn insert_file(&mut self, path: &str, bucket: &str, data: Vec<u8>) -> Result<i64, Self::Err> {
         self.assign_cache_size()?;
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
@@ -61,7 +61,6 @@ impl Storage for Sqlite {
         let hash = hash.to_string();
 
         Sqlite::execute_with_retry(|| {
-            let mut bytes_written = 0;
             let tx = self.conn.transaction()?;
 
             let mut stmt = tx.prepare("SELECT blake3_hash FROM blob WHERE blake3_hash = ?1")?;
@@ -82,7 +81,6 @@ impl Storage for Sqlite {
                 let rowid = tx.last_insert_rowid();
 
                 let mut blob = tx.blob_open(DatabaseName::Main, "blob", "data", rowid, false)?;
-                bytes_written = data.len();
                 match blob.write_all(&data) {
                     Ok(_) => {}
                     Err(e) => {
@@ -99,9 +97,17 @@ impl Storage for Sqlite {
             )?
             .execute(params![&hash, path, bucket])?;
 
+            let mut stmt = tx.prepare("SELECT MAX(id) FROM file")?;
+
+            let id = stmt.query_row([], |row| {
+                let id = row.get(0)?;
+                Ok(id)
+            })?;
+            stmt.finalize()?;
+
             tx.commit()?;
 
-            Ok(bytes_written)
+            Ok(id)
         })
     }
 

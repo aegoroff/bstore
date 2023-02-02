@@ -40,19 +40,25 @@ pub async fn insert_many_from_form(
         Ok(s) => s,
         Err(e) => {
             tracing::error!("{e}");
-            return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                e.to_string().into_response(),
+            );
         }
     };
 
     tracing::info!("create bucket: {bucket}");
+    let mut inserted: Vec<i64> = vec![];
     while let Ok(Some(field)) = multipart.next_field().await {
         let file_name = field.file_name().unwrap_or_default().to_string();
         let (result, read_bytes) = read_from_stream(field).await;
         let insert_result = repository.insert_file(&file_name, &bucket, result);
-        log_file_operation_result(insert_result, &file_name, read_bytes as u64);
+        if let Some(id) = log_file_operation_result(insert_result, &file_name, read_bytes as u64) {
+            inserted.push(id);
+        }
     }
 
-    (StatusCode::CREATED, String::default())
+    (StatusCode::CREATED, Json(inserted).into_response())
 }
 
 /// Adds single file or several files from zip into bucket. To add files from zip just post data with file name equal zip
@@ -76,10 +82,15 @@ pub async fn insert_file_or_zipped_bucket(
     let (result, read_bytes) = read_from_stream(body).await;
 
     execute(db, Mode::ReadWrite, move |mut repository| {
+        let mut inserted: Vec<i64> = vec![];
         if file_name != "zip" {
             // Plain file branch
             let insert_result = repository.insert_file(&file_name, &bucket, result);
-            log_file_operation_result(insert_result, &file_name, read_bytes as u64);
+            if let Some(id) =
+                log_file_operation_result(insert_result, &file_name, read_bytes as u64)
+            {
+                inserted.push(id);
+            }
         } else {
             // Zip archive branch
             let buff = Cursor::new(result);
@@ -100,16 +111,21 @@ pub async fn insert_file_or_zipped_bucket(
                                     None => continue,
                                 };
 
-                                let mut writer: Vec<u8> = Vec::with_capacity(zip_file.size() as usize);
+                                let mut writer: Vec<u8> =
+                                    Vec::with_capacity(zip_file.size() as usize);
                                 match std::io::copy(&mut zip_file, &mut writer) {
                                     Ok(r) => {
                                         let insert_result =
                                             repository.insert_file(outpath, &bucket, writer);
-                                        log_file_operation_result(insert_result, outpath, r);
+                                        if let Some(id) =
+                                            log_file_operation_result(insert_result, outpath, r)
+                                        {
+                                            inserted.push(id);
+                                        }
                                     }
                                     Err(e) => {
                                         tracing::error!("Zip file copy error: {e}");
-                                    },
+                                    }
                                 }
                             }
                             Err(e) => {
@@ -120,12 +136,15 @@ pub async fn insert_file_or_zipped_bucket(
                 }
                 Err(e) => {
                     tracing::error!("{:#?}", e);
-                    return Ok((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
+                    return Ok((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        e.to_string().into_response(),
+                    ));
                 }
             }
         }
 
-        Ok((StatusCode::CREATED, String::default()))
+        Ok((StatusCode::CREATED, Json(inserted).into_response()))
     })
 }
 
@@ -388,21 +407,18 @@ where
 }
 
 fn log_file_operation_result<E: Display>(
-    operation_result: Result<usize, E>,
+    operation_result: Result<i64, E>,
     file_name: &str,
     read_bytes: u64,
-) {
+) -> Option<i64> {
     match operation_result {
-        Ok(written) => {
-            tracing::info!(
-                "file: {} read: {} written: {}",
-                file_name,
-                read_bytes,
-                written
-            );
+        Ok(id) => {
+            tracing::info!("file: {} read: {} file id: {}", file_name, read_bytes, id);
+            Some(id)
         }
         Err(e) => {
             tracing::error!("file '{}' not inserted. Error: {}", file_name, e);
+            None
         }
     }
 }

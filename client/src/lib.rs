@@ -36,7 +36,24 @@ pub async fn insert_file(params: FileParams) {
     let result = client.post(resource.to_string()).body(stream).send().await;
     match result {
         Ok(x) => {
-            println!("file {} inserted. Status: {}", params.file, x.status());
+            let status = x.status();
+            let r: Result<Vec<i64>, reqwest::Error> = x.json().await;
+            match r {
+                Ok(r) => {
+                    if r.is_empty() {
+                        println!(
+                            "file {} not inserted. Status: {status}. No id returned",
+                            params.file
+                        );
+                    } else {
+                        println!(
+                            "file {} inserted. Status: {status}. ID: {}",
+                            params.file, r[0]
+                        );
+                    }
+                }
+                Err(e) => println!("Invalid insert result. Error: {e}. Status: {status}"),
+            }
         }
         Err(e) => {
             println!("insert_one error: {e}");

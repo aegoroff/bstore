@@ -8,7 +8,7 @@ pub trait Storage {
 
     fn new_database(&self) -> Result<(), Self::Err>;
 
-    fn insert_file(&mut self, path: &str, bucket: &str, data: Vec<u8>) -> Result<usize, Self::Err>;
+    fn insert_file(&mut self, path: &str, bucket: &str, data: Vec<u8>) -> Result<i64, Self::Err>;
 
     fn delete_bucket(&mut self, bucket: &str) -> Result<DeleteResult, Self::Err>;
 
