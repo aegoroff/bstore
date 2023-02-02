@@ -24,7 +24,7 @@ use axum::{
     post,
     path = "/api/{bucket}",
     responses(
-        (status = 201, description = "Files created successfully", body = String),
+        (status = 201, description = "Files created successfully", body = [i64]),
         (status = 500, description = "Server error", body = String)
     ),
     params(
@@ -66,7 +66,7 @@ pub async fn insert_many_from_form(
     post,
     path = "/api/{bucket}/{file_name}",
     responses(
-        (status = 201, description = "File or many files added into bucket"),
+        (status = 201, description = "File or many files added into bucket", body = [i64]),
         (status = 500, description = "Server error", body = String)
     ),
     params(
