@@ -95,7 +95,7 @@ pub async fn insert_file(
     })
 }
 
-/// Adds several files from zip into bucket. To add files from zip just post data with file name equal zip
+/// Adds several files from zip into bucket.
 #[utoipa::path(
     post,
     path = "/api/{bucket}/zip",
