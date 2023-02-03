@@ -27,6 +27,7 @@ use axum::{
         (status = 201, description = "Files created successfully", body = [i64]),
         (status = 500, description = "Server error", body = String)
     ),
+    tag = "buckets",
     params(
         ("bucket" = String, Path, description = "Bucket id")
     ),
@@ -61,20 +62,21 @@ pub async fn insert_many_from_form(
     (StatusCode::CREATED, Json(inserted).into_response())
 }
 
-/// Adds single file or several files from zip into bucket. To add files from zip just post data with file name equal zip
+/// Adds single file into bucket.
 #[utoipa::path(
     post,
     path = "/api/{bucket}/{file_name}",
+    tag = "files",
     responses(
-        (status = 201, description = "File or many files added into bucket", body = [i64]),
+        (status = 201, description = "File added into bucket", body = [i64]),
         (status = 500, description = "Server error", body = String)
     ),
     params(
         ("bucket" = String, Path, description = "Bucket id"),
-        ("file_name" = String, Path, description = "File path inside bucket or zip string to insert many files from zip")
+        ("file_name" = String, Path, description = "File path inside bucket")
     ),
 )]
-pub async fn insert_file_or_zipped_bucket(
+pub async fn insert_file(
     Path((bucket, file_name)): Path<(String, String)>,
     State(db): State<Arc<PathBuf>>,
     body: BodyStream,
@@ -83,64 +85,85 @@ pub async fn insert_file_or_zipped_bucket(
 
     execute(db, Mode::ReadWrite, move |mut repository| {
         let mut inserted: Vec<i64> = vec![];
-        if file_name != "zip" {
-            // Plain file branch
-            let insert_result = repository.insert_file(&file_name, &bucket, result);
-            if let Some(id) =
-                log_file_operation_result(insert_result, &file_name, read_bytes as u64)
-            {
-                inserted.push(id);
-            }
-        } else {
-            // Zip archive branch
-            let buff = Cursor::new(result);
+        // Plain file branch
+        let insert_result = repository.insert_file(&file_name, &bucket, result);
+        if let Some(id) = log_file_operation_result(insert_result, &file_name, read_bytes as u64) {
+            inserted.push(id);
+        }
 
-            let zip_result = zip::ZipArchive::new(buff);
+        Ok((StatusCode::CREATED, Json(inserted).into_response()))
+    })
+}
 
-            match zip_result {
-                Ok(mut archive) => {
-                    for i in 0..archive.len() {
-                        match archive.by_index(i) {
-                            Ok(mut zip_file) => {
-                                let outpath = match zip_file.enclosed_name() {
-                                    Some(path) => path.to_owned(),
-                                    None => continue,
-                                };
-                                let outpath = match outpath.to_str() {
-                                    Some(p) => p,
-                                    None => continue,
-                                };
+/// Adds several files from zip into bucket. To add files from zip just post data with file name equal zip
+#[utoipa::path(
+    post,
+    path = "/api/{bucket}/zip",
+    tag = "buckets",
+    responses(
+        (status = 201, description = "Files added into bucket", body = [i64]),
+        (status = 500, description = "Server error", body = String)
+    ),
+    params(
+        ("bucket" = String, Path, description = "Bucket id"),
+    ),
+)]
+pub async fn insert_zipped_bucket(
+    Path(bucket): Path<String>,
+    State(db): State<Arc<PathBuf>>,
+    body: BodyStream,
+) -> Result<impl IntoResponse, String> {
+    let (result, _) = read_from_stream(body).await;
 
-                                let mut writer: Vec<u8> =
-                                    Vec::with_capacity(zip_file.size() as usize);
-                                match std::io::copy(&mut zip_file, &mut writer) {
-                                    Ok(r) => {
-                                        let insert_result =
-                                            repository.insert_file(outpath, &bucket, writer);
-                                        if let Some(id) =
-                                            log_file_operation_result(insert_result, outpath, r)
-                                        {
-                                            inserted.push(id);
-                                        }
-                                    }
-                                    Err(e) => {
-                                        tracing::error!("Zip file copy error: {e}");
+    execute(db, Mode::ReadWrite, move |mut repository| {
+        let mut inserted: Vec<i64> = vec![];
+        // Zip archive branch
+        let buff = Cursor::new(result);
+
+        let zip_result = zip::ZipArchive::new(buff);
+
+        match zip_result {
+            Ok(mut archive) => {
+                for i in 0..archive.len() {
+                    match archive.by_index(i) {
+                        Ok(mut zip_file) => {
+                            let outpath = match zip_file.enclosed_name() {
+                                Some(path) => path.to_owned(),
+                                None => continue,
+                            };
+                            let outpath = match outpath.to_str() {
+                                Some(p) => p,
+                                None => continue,
+                            };
+
+                            let mut writer: Vec<u8> = Vec::with_capacity(zip_file.size() as usize);
+                            match std::io::copy(&mut zip_file, &mut writer) {
+                                Ok(r) => {
+                                    let insert_result =
+                                        repository.insert_file(outpath, &bucket, writer);
+                                    if let Some(id) =
+                                        log_file_operation_result(insert_result, outpath, r)
+                                    {
+                                        inserted.push(id);
                                     }
                                 }
+                                Err(e) => {
+                                    tracing::error!("Zip file copy error: {e}");
+                                }
                             }
-                            Err(e) => {
-                                tracing::error!("file not extracted. Error: {:#?}", e);
-                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("file not extracted. Error: {:#?}", e);
                         }
                     }
                 }
-                Err(e) => {
-                    tracing::error!("{:#?}", e);
-                    return Ok((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        e.to_string().into_response(),
-                    ));
-                }
+            }
+            Err(e) => {
+                tracing::error!("{:#?}", e);
+                return Ok((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    e.to_string().into_response(),
+                ));
             }
         }
 
@@ -156,6 +179,7 @@ pub async fn insert_file_or_zipped_bucket(
         (status = 201, description = "Bucket with all files successfully deleted", body = DeleteResult),
         (status = 404, description = "Bucket not found", body = DeleteResult)
     ),
+    tag = "buckets",
     params(
         ("bucket" = String, Path, description = "Bucket id")
     ),
@@ -195,6 +219,7 @@ pub async fn delete_bucket(
 #[utoipa::path(
     get,
     path = "/api/",
+    tag = "buckets",
     responses(
         (status = 200, description = "List all buckets successfully", body = [Bucket]),
     ),
@@ -214,6 +239,7 @@ pub async fn get_buckets(State(db): State<Arc<PathBuf>>) -> Result<impl IntoResp
         (status = 200, description = "Get all bucket's files successfully", body = [File]),
         (status = 404, description = "Bucket not found", body = [File])
     ),
+    tag = "buckets",
     params(
         ("bucket" = String, Path, description = "Bucket id")
     ),
@@ -241,6 +267,7 @@ pub async fn get_files(
         (status = 200, response = FileReply),
         (status = 404, description = "File not found", body = String)
     ),
+    tag = "files",
     params(
         ("id" = i64, Path, description = "File id")
     ),
@@ -278,6 +305,7 @@ pub async fn get_file_content(
         (status = 200, response = FileReply),
         (status = 404, description = "File not found", body = String)
     ),
+    tag = "files",
     params(
         ("bucket" = String, Path, description = "Bucket id"),
         ("file_name" = String, Path, description = "File path inside bucket")
@@ -354,6 +382,7 @@ macro_rules! delete_file {
         (status = 200, description = "File successfully deleted", body = DeleteResult),
         (status = 404, description = "File not found", body = DeleteResult)
     ),
+    tag = "files",
     params(
         ("id" = i64, Path, description = "File id")
     ),
@@ -375,6 +404,7 @@ pub async fn delete_file(
         (status = 200, description = "File successfully deleted", body = DeleteResult),
         (status = 404, description = "File not found", body = DeleteResult)
     ),
+    tag = "files",
     params(
         ("bucket" = String, Path, description = "Bucket id"),
         ("file_name" = String, Path, description = "File path inside bucket")

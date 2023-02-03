@@ -44,7 +44,8 @@ extern crate tokio;
 pub async fn run() {
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "server=debug,axum=debug,hyper=info,tower=info".into()),
+            std::env::var("RUST_LOG")
+                .unwrap_or_else(|_| "server=debug,axum=debug,hyper=info,tower=info".into()),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -81,7 +82,8 @@ pub fn create_routes(db: PathBuf) -> Router {
         paths(
             handlers::get_buckets,
             handlers::insert_many_from_form,
-            handlers::insert_file_or_zipped_bucket,
+            handlers::insert_file,
+            handlers::insert_zipped_bucket,
             handlers::delete_file,
             handlers::delete_bucket,
             handlers::get_files,
@@ -110,10 +112,11 @@ pub fn create_routes(db: PathBuf) -> Router {
         )
         .route(
             "/api/:bucket/:file_name",
-            post(handlers::insert_file_or_zipped_bucket)
+            post(handlers::insert_file)
                 .get(handlers::search_and_get_file_content)
                 .delete(handlers::search_and_delete_file),
         )
+        .route("/api/:bucket/zip", post(handlers::insert_zipped_bucket))
         .route(
             "/api/file/:id",
             delete(handlers::delete_file).get(handlers::get_file_content),
