@@ -41,10 +41,7 @@ pub async fn insert_many_from_form(
         Ok(s) => s,
         Err(e) => {
             tracing::error!("{e}");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                e.to_string().into_response(),
-            );
+            return internal_server_error(e);
         }
     };
 
@@ -52,10 +49,19 @@ pub async fn insert_many_from_form(
     let mut inserted: Vec<i64> = vec![];
     while let Ok(Some(field)) = multipart.next_field().await {
         let file_name = field.file_name().unwrap_or_default().to_string();
-        let (result, read_bytes) = read_from_stream(field).await;
-        let insert_result = repository.insert_file(&file_name, &bucket, result);
-        if let Some(id) = log_file_operation_result(insert_result, &file_name, read_bytes as u64) {
-            inserted.push(id);
+        match read_from_stream(field).await {
+            Ok((result, read_bytes)) => {
+                let insert_result = repository.insert_file(&file_name, &bucket, result);
+                if let Some(id) =
+                    log_file_operation_result(insert_result, &file_name, read_bytes as u64)
+                {
+                    inserted.push(id);
+                }
+            }
+            Err(e) => {
+                tracing::error!("{e}");
+                return internal_server_error(e);
+            }
         }
     }
 
@@ -81,18 +87,25 @@ pub async fn insert_file(
     State(db): State<Arc<PathBuf>>,
     body: BodyStream,
 ) -> Result<impl IntoResponse, String> {
-    let (result, read_bytes) = read_from_stream(body).await;
-
-    execute(db, Mode::ReadWrite, move |mut repository| {
-        let mut inserted: Vec<i64> = vec![];
-        // Plain file branch
-        let insert_result = repository.insert_file(&file_name, &bucket, result);
-        if let Some(id) = log_file_operation_result(insert_result, &file_name, read_bytes as u64) {
-            inserted.push(id);
+    match read_from_stream(body).await {
+        Ok((result, read_bytes)) => {
+            execute(db, Mode::ReadWrite, move |mut repository| {
+                let mut inserted: Vec<i64> = vec![];
+                // Plain file branch
+                let insert_result = repository.insert_file(&file_name, &bucket, result);
+                if let Some(id) =
+                    log_file_operation_result(insert_result, &file_name, read_bytes as u64)
+                {
+                    inserted.push(id);
+                }
+                Ok(created(Json(inserted)))
+            })
         }
-
-        Ok((StatusCode::CREATED, Json(inserted).into_response()))
-    })
+        Err(e) => {
+            tracing::error!("{e}");
+            Ok(internal_server_error(e))
+        }
+    }
 }
 
 /// Adds several files from zip into bucket.
@@ -113,62 +126,66 @@ pub async fn insert_zipped_bucket(
     State(db): State<Arc<PathBuf>>,
     body: BodyStream,
 ) -> Result<impl IntoResponse, String> {
-    let (result, _) = read_from_stream(body).await;
+    match read_from_stream(body).await {
+        Ok((data, _)) => {
+            execute(db, Mode::ReadWrite, move |mut repository| {
+                let mut inserted: Vec<i64> = vec![];
+                // Zip archive branch
+                let buff = Cursor::new(data);
 
-    execute(db, Mode::ReadWrite, move |mut repository| {
-        let mut inserted: Vec<i64> = vec![];
-        // Zip archive branch
-        let buff = Cursor::new(result);
+                let zip_result = zip::ZipArchive::new(buff);
 
-        let zip_result = zip::ZipArchive::new(buff);
+                match zip_result {
+                    Ok(mut archive) => {
+                        for i in 0..archive.len() {
+                            match archive.by_index(i) {
+                                Ok(mut zip_file) => {
+                                    let outpath = match zip_file.enclosed_name() {
+                                        Some(path) => path.to_owned(),
+                                        None => continue,
+                                    };
+                                    let outpath = match outpath.to_str() {
+                                        Some(p) => p,
+                                        None => continue,
+                                    };
 
-        match zip_result {
-            Ok(mut archive) => {
-                for i in 0..archive.len() {
-                    match archive.by_index(i) {
-                        Ok(mut zip_file) => {
-                            let outpath = match zip_file.enclosed_name() {
-                                Some(path) => path.to_owned(),
-                                None => continue,
-                            };
-                            let outpath = match outpath.to_str() {
-                                Some(p) => p,
-                                None => continue,
-                            };
-
-                            let mut writer: Vec<u8> = Vec::with_capacity(zip_file.size() as usize);
-                            match std::io::copy(&mut zip_file, &mut writer) {
-                                Ok(r) => {
-                                    let insert_result =
-                                        repository.insert_file(outpath, &bucket, writer);
-                                    if let Some(id) =
-                                        log_file_operation_result(insert_result, outpath, r)
-                                    {
-                                        inserted.push(id);
+                                    let mut writer: Vec<u8> =
+                                        Vec::with_capacity(zip_file.size() as usize);
+                                    match std::io::copy(&mut zip_file, &mut writer) {
+                                        Ok(r) => {
+                                            let insert_result =
+                                                repository.insert_file(outpath, &bucket, writer);
+                                            if let Some(id) =
+                                                log_file_operation_result(insert_result, outpath, r)
+                                            {
+                                                inserted.push(id);
+                                            }
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("Zip file copy error: {e}");
+                                        }
                                     }
                                 }
                                 Err(e) => {
-                                    tracing::error!("Zip file copy error: {e}");
+                                    tracing::error!("file not extracted. Error: {:#?}", e);
                                 }
                             }
                         }
-                        Err(e) => {
-                            tracing::error!("file not extracted. Error: {:#?}", e);
-                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("{:#?}", e);
+                        return Ok(internal_server_error(e));
                     }
                 }
-            }
-            Err(e) => {
-                tracing::error!("{:#?}", e);
-                return Ok((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    e.to_string().into_response(),
-                ));
-            }
-        }
 
-        Ok((StatusCode::CREATED, Json(inserted).into_response()))
-    })
+                Ok(created(Json(inserted)))
+            })
+        }
+        Err(e) => {
+            tracing::error!("{e}");
+            Ok(internal_server_error(e))
+        }
+    }
 }
 
 /// Deletes whole bucket with all it's files
@@ -422,7 +439,7 @@ pub async fn search_and_delete_file(
     })
 }
 
-fn execute<F, R>(db: Arc<PathBuf>, mode: Mode, action: F) -> Result<impl IntoResponse, String>
+fn execute<F, R>(db: Arc<PathBuf>, mode: Mode, action: F) -> Result<R, String>
 where
     F: FnOnce(Sqlite) -> Result<R, String>,
     R: IntoResponse,
@@ -453,26 +470,29 @@ fn log_file_operation_result<E: Display>(
     }
 }
 
-async fn read_from_stream<S, E>(stream: S) -> (Vec<u8>, usize)
+fn created<S: IntoResponse>(s: S) -> (StatusCode, Response) {
+    (StatusCode::CREATED, s.into_response())
+}
+
+fn internal_server_error<E: ToString>(e: E) -> (StatusCode, Response) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        e.to_string().into_response(),
+    )
+}
+
+async fn read_from_stream<S, E>(stream: S) -> io::Result<(Vec<u8>, usize)>
 where
     S: Stream<Item = Result<Bytes, E>>,
     S: StreamExt,
     E: Sync + std::error::Error + Send + 'static,
 {
-    async {
-        // Convert the stream into an `AsyncRead`.
-        let body_with_io_error = stream.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
-        let body_reader = StreamReader::new(body_with_io_error);
-        futures::pin_mut!(body_reader);
-        let mut buffer = Vec::new();
+    // Convert the stream into an `AsyncRead`.
+    let body_with_io_error = stream.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
+    let body_reader = StreamReader::new(body_with_io_error);
+    futures::pin_mut!(body_reader);
+    let mut buffer = Vec::new();
 
-        match tokio::io::copy(&mut body_reader, &mut buffer).await {
-            Ok(copied_bytes) => (buffer, copied_bytes as usize),
-            Err(e) => {
-                tracing::error!("Reading from stream error. Error: {e}");
-                (buffer, 0)
-            }
-        }
-    }
-    .await
+    let copied_bytes = tokio::io::copy(&mut body_reader, &mut buffer).await?;
+    Ok((buffer, copied_bytes as usize))
 }
