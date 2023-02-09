@@ -353,16 +353,6 @@ pub async fn search_and_get_file_content(
     make_response(result)
 }
 
-fn make_response(result: Result<impl IntoResponse + Sized, String>) -> (StatusCode, Response) {
-    match result {
-        Ok(response) => (StatusCode::OK, response.into_response()),
-        Err(e) => {
-            tracing::error!("Error: {e}");
-            (StatusCode::NOT_FOUND, e.into_response())
-        }
-    }
-}
-
 macro_rules! delete_file {
     ($repository:ident, $id:expr) => {{
         let delete_result = $repository.delete_file($id);
@@ -437,6 +427,16 @@ pub async fn search_and_delete_file(
         Ok(f) => delete_file!(repository, f.id),
         Err(_e) => Ok((StatusCode::NOT_FOUND, Json(DeleteResult::default()))),
     })
+}
+
+fn make_response(result: Result<impl IntoResponse + Sized, String>) -> (StatusCode, Response) {
+    match result {
+        Ok(response) => (StatusCode::OK, response.into_response()),
+        Err(e) => {
+            tracing::error!("Error: {e}");
+            (StatusCode::NOT_FOUND, e.into_response())
+        }
+    }
 }
 
 fn execute<F, R>(db: Arc<PathBuf>, mode: Mode, action: F) -> Result<R, String>
