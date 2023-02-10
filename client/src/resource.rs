@@ -36,7 +36,7 @@ impl Resource {
         } else {
             let r = self.url.join(path);
             if let Ok(u) = r {
-                self.url = u
+                self.url = u;
             }
         }
         self

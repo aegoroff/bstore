@@ -293,15 +293,12 @@ impl Sqlite {
                 if let Error::SqliteFailure(e, _) = err {
                     if e.code == ErrorCode::DatabaseBusy {
                         continue;
-                    } else {
-                        return Err(err);
                     }
-                } else {
                     return Err(err);
                 }
-            } else {
-                return result;
+                return Err(err);
             }
+            return result;
         }
     }
 }
