@@ -147,7 +147,7 @@ impl Storage for Sqlite {
             Ok(b)
         })?;
 
-        Ok(buckets.filter_map(|r| r.ok()).collect())
+        Ok(buckets.filter_map(std::result::Result::ok).collect())
     }
 
     fn get_files(&mut self, bucket: &str) -> Result<Vec<File>, Self::Err> {
@@ -169,7 +169,7 @@ impl Storage for Sqlite {
             Ok(file)
         })?;
 
-        Ok(files.filter_map(|r| r.ok()).collect())
+        Ok(files.filter_map(std::result::Result::ok).collect())
     }
 
     fn get_file_data(&self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err> {

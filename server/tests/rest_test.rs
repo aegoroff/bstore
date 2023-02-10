@@ -115,7 +115,7 @@ where
         let mut f = std::fs::File::open(path).unwrap();
 
         f.read_to_end(&mut buffer).unwrap();
-        zip.write_all(&*buffer).unwrap();
+        zip.write_all(&buffer).unwrap();
         buffer.clear();
     };
 
@@ -196,7 +196,7 @@ impl AsyncTestContext for BstoreAsyncContext {
         let mut port = 0;
 
         if let Some(available_port) = get_available_port() {
-            println!("port `{}` is available", available_port);
+            println!("port `{available_port}` is available");
             port = available_port;
         }
 
@@ -258,7 +258,7 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
             assert_eq!(4, r.len());
         }
         Err(e) => {
-            assert!(false, "insert_many_from_form error: {}", e);
+            assert!(false, "insert_many_from_form error: {e}");
         }
     }
 }
@@ -294,7 +294,7 @@ async fn insert_one(ctx: &mut BstoreAsyncContext) {
             assert_eq!(1, r.len());
         }
         Err(e) => {
-            assert!(false, "insert_one error: {}", e);
+            assert!(false, "insert_one error: {e}");
         }
     }
 }
@@ -331,7 +331,7 @@ async fn insert_one_that_zero_lengh(ctx: &mut BstoreAsyncContext) {
             assert_eq!(1, r.len());
         }
         Err(e) => {
-            assert!(false, "insert_one error: {}", e);
+            assert!(false, "insert_one error: {e}");
         }
     }
 }
@@ -370,7 +370,7 @@ async fn insert_zip(ctx: &mut BstoreAsyncContext) {
             assert_eq!(4, r.len());
         }
         Err(e) => {
-            assert!(false, "insert_zip error: {}", e);
+            assert!(false, "insert_zip error: {e}");
         }
     }
     let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
@@ -389,7 +389,7 @@ async fn insert_many_from_form_concurrently(ctx: &mut BstoreAsyncContext) {
         let task = tokio::spawn(async move {
             // Arrange
             let client = Client::new();
-            let uri = format!("http://localhost:{}/api/{number}", port);
+            let uri = format!("http://localhost:{port}/api/{number}");
 
             let form = wrap_directory_into_multipart_form(&root).await.unwrap();
 
@@ -402,7 +402,7 @@ async fn insert_many_from_form_concurrently(ctx: &mut BstoreAsyncContext) {
                     assert_eq!(x.status(), http::status::StatusCode::CREATED);
                 }
                 Err(e) => {
-                    assert!(false, "insert_many_from_form_concurrently error: {}", e);
+                    assert!(false, "insert_many_from_form_concurrently error: {e}");
                 }
             }
         });
@@ -439,7 +439,7 @@ async fn delete_bucket_and_all_blobls(ctx: &mut BstoreAsyncContext) {
             assert_eq!(x.blobs, 4);
         }
         Err(e) => {
-            assert!(false, "delete_bucket_and_all_blobls error: {}", e);
+            assert!(false, "delete_bucket_and_all_blobls error: {e}");
         }
     }
 }
@@ -472,7 +472,7 @@ async fn delete_bucket_but_keep_blobls(ctx: &mut BstoreAsyncContext) {
             assert_eq!(x.blobs, 0);
         }
         Err(e) => {
-            assert!(false, "delete_bucket_but_keep_blobls error: {}", e);
+            assert!(false, "delete_bucket_but_keep_blobls error: {e}");
         }
     }
 }
@@ -500,7 +500,7 @@ async fn get_bucket_files(ctx: &mut BstoreAsyncContext) {
             assert_eq!(x.len(), 4);
         }
         Err(e) => {
-            assert!(false, "get_bucket_files error: {}", e);
+            assert!(false, "get_bucket_files error: {e}");
         }
     }
 }
@@ -529,7 +529,7 @@ async fn get_buckets(ctx: &mut BstoreAsyncContext) {
             assert_eq!(x.len(), 1);
         }
         Err(e) => {
-            assert!(false, "get_buckets error: {}", e);
+            assert!(false, "get_buckets error: {e}");
         }
     }
 }
@@ -681,7 +681,7 @@ async fn delete_file_success(ctx: &mut BstoreAsyncContext) {
             assert_eq!(x.files, 1);
         }
         Err(e) => {
-            assert!(false, "delete_file_success error: {}", e);
+            assert!(false, "delete_file_success error: {e}");
         }
     }
 }
@@ -712,7 +712,7 @@ async fn search_and_delete_file_success(ctx: &mut BstoreAsyncContext) {
             assert_eq!(x.files, 1);
         }
         Err(e) => {
-            assert!(false, "delete_file_success error: {}", e);
+            assert!(false, "delete_file_success error: {e}");
         }
     }
 }
@@ -729,7 +729,7 @@ async fn delete_file_failure(ctx: &mut BstoreAsyncContext) {
     let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
 
     client.post(&uri).multipart(form).send().await.unwrap();
-    let file_id = 1111111;
+    let file_id = 1_111_111;
     let file_uri = format!("http://localhost:{}/api/file/{file_id}", ctx.port);
 
     // Act
