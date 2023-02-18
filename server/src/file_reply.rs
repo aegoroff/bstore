@@ -15,6 +15,7 @@ pub struct FileReply {
 }
 
 impl FileReply {
+    #[must_use]
     pub fn new(data: Vec<u8>, file: File) -> Self {
         Self { data, file }
     }
@@ -69,7 +70,7 @@ impl ToResponse<'static> for FileReply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::*;
+    use rstest::rstest;
 
     #[rstest]
     #[case("", "")]

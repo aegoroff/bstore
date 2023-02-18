@@ -1,7 +1,6 @@
-
+pub mod client;
 pub mod server;
 pub mod version;
-pub mod client;
 
 pub const SERVER_SUBCOMMAND: &str = "server";
 pub const SERVER_DESCRIPTION: &str = "Run the server";

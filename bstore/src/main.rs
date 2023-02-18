@@ -60,7 +60,10 @@ async fn main() {
         }
     } else if let Some(insert_matches) = cli.subcommand_matches(cli::LIST_SUBCOMMAND) {
         let uri = insert_matches.get_one::<String>("uri").unwrap();
-        if insert_matches.subcommand_matches(cli::BUCKET_SUBCOMMAND).is_some() {
+        if insert_matches
+            .subcommand_matches(cli::BUCKET_SUBCOMMAND)
+            .is_some()
+        {
             list_buckets(uri).await;
         }
     }

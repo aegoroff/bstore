@@ -253,7 +253,7 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
     match result {
         Ok(x) => {
             assert_eq!(x.status(), http::status::StatusCode::CREATED);
-            let r : Result<Vec<i64>, reqwest::Error> = x.json().await;
+            let r: Result<Vec<i64>, reqwest::Error> = x.json().await;
             let r = r.unwrap();
             assert_eq!(4, r.len());
         }
@@ -289,7 +289,7 @@ async fn insert_one(ctx: &mut BstoreAsyncContext) {
     match result {
         Ok(x) => {
             assert_eq!(x.status(), http::status::StatusCode::CREATED);
-            let r : Result<Vec<i64>, reqwest::Error> = x.json().await;
+            let r: Result<Vec<i64>, reqwest::Error> = x.json().await;
             let r = r.unwrap();
             assert_eq!(1, r.len());
         }
@@ -326,7 +326,7 @@ async fn insert_one_that_zero_lengh(ctx: &mut BstoreAsyncContext) {
     match result {
         Ok(x) => {
             assert_eq!(x.status(), http::status::StatusCode::CREATED);
-            let r : Result<Vec<i64>, reqwest::Error> = x.json().await;
+            let r: Result<Vec<i64>, reqwest::Error> = x.json().await;
             let r = r.unwrap();
             assert_eq!(1, r.len());
         }
@@ -365,7 +365,7 @@ async fn insert_zip(ctx: &mut BstoreAsyncContext) {
     match result {
         Ok(x) => {
             assert_eq!(x.status(), http::status::StatusCode::CREATED);
-            let r : Result<Vec<i64>, reqwest::Error> = x.json().await;
+            let r: Result<Vec<i64>, reqwest::Error> = x.json().await;
             let r = r.unwrap();
             assert_eq!(4, r.len());
         }

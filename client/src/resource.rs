@@ -12,6 +12,7 @@ pub struct Resource {
 }
 
 impl Resource {
+    #[must_use]
     pub fn new(uri: &str) -> Option<Resource> {
         let url = Url::parse(uri).ok()?;
         Some(Resource { url })
@@ -31,7 +32,7 @@ impl Resource {
             if path.chars().rev().next().unwrap_or_default() == SEP {
                 self.url.set_path(&p);
             } else {
-                self.url.set_path(&p[..p.len()-1]);
+                self.url.set_path(&p[..p.len() - 1]);
             }
         } else {
             let r = self.url.join(path);
@@ -52,7 +53,7 @@ impl fmt::Display for Resource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::*;
+    use rstest::rstest;
 
     #[test]
     fn new_correct_some() {
