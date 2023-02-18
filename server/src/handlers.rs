@@ -41,7 +41,7 @@ pub async fn insert_many_from_form(
         Ok(s) => s,
         Err(e) => {
             tracing::error!("{e}");
-            return internal_server_error(e);
+            return internal_server_error(&e);
         }
     };
 
@@ -60,7 +60,7 @@ pub async fn insert_many_from_form(
             }
             Err(e) => {
                 tracing::error!("{e}");
-                return internal_server_error(e);
+                return internal_server_error(&e);
             }
         }
     }
@@ -89,7 +89,7 @@ pub async fn insert_file(
 ) -> Result<impl IntoResponse, String> {
     match read_from_stream(body).await {
         Ok((result, read_bytes)) => {
-            execute(db, Mode::ReadWrite, move |mut repository| {
+            execute(&db, Mode::ReadWrite, move |mut repository| {
                 let mut inserted: Vec<i64> = vec![];
                 // Plain file branch
                 let insert_result = repository.insert_file(&file_name, &bucket, result);
@@ -103,7 +103,7 @@ pub async fn insert_file(
         }
         Err(e) => {
             tracing::error!("{e}");
-            Ok(internal_server_error(e))
+            Ok(internal_server_error(&e))
         }
     }
 }
@@ -128,7 +128,7 @@ pub async fn insert_zipped_bucket(
 ) -> Result<impl IntoResponse, String> {
     match read_from_stream(body).await {
         Ok((data, _)) => {
-            execute(db, Mode::ReadWrite, move |mut repository| {
+            execute(&db, Mode::ReadWrite, move |mut repository| {
                 let mut inserted: Vec<i64> = vec![];
                 // Zip archive branch
                 let buff = Cursor::new(data);
@@ -171,7 +171,7 @@ pub async fn insert_zipped_bucket(
                     }
                     Err(e) => {
                         tracing::error!("{:#?}", e);
-                        return Ok(internal_server_error(e));
+                        return Ok(internal_server_error(&e));
                     }
                 }
 
@@ -180,7 +180,7 @@ pub async fn insert_zipped_bucket(
         }
         Err(e) => {
             tracing::error!("{e}");
-            Ok(internal_server_error(e))
+            Ok(internal_server_error(&e))
         }
     }
 }
@@ -202,7 +202,7 @@ pub async fn delete_bucket(
     Path(bucket): Path<String>,
     State(db): State<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadWrite, move |mut repository| {
+    execute(&db, Mode::ReadWrite, move |mut repository| {
         let delete_result = repository.delete_bucket(&bucket);
         let result = match delete_result {
             Ok(deleted) => {
@@ -239,7 +239,7 @@ pub async fn delete_bucket(
     ),
 )]
 pub async fn get_buckets(State(db): State<Arc<PathBuf>>) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadOnly, move |mut repository| {
+    execute(&db, Mode::ReadOnly, move |mut repository| {
         let result = repository.get_buckets().unwrap_or_default();
         Ok(Json(result))
     })
@@ -262,7 +262,7 @@ pub async fn get_files(
     Path(bucket): Path<String>,
     State(db): State<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadOnly, move |mut repository| {
+    execute(&db, Mode::ReadOnly, move |mut repository| {
         let result = repository.get_files(&bucket).unwrap_or_default();
         let status = if result.is_empty() {
             StatusCode::NOT_FOUND
@@ -290,7 +290,7 @@ pub async fn get_file_content(
     Path(id): Path<i64>,
     State(db): State<Arc<PathBuf>>,
 ) -> impl IntoResponse {
-    let result = execute(db, Mode::ReadOnly, move |mut repository| {
+    let result = execute(&db, Mode::ReadOnly, move |mut repository| {
         let info = match repository.get_file_info(id) {
             Ok(f) => f,
             Err(e) => return Err(e.to_string()),
@@ -329,7 +329,7 @@ pub async fn search_and_get_file_content(
     Path((bucket, file_name)): Path<(String, String)>,
     State(db): State<Arc<PathBuf>>,
 ) -> impl IntoResponse {
-    let result = execute(db, Mode::ReadOnly, move |mut repository| {
+    let result = execute(&db, Mode::ReadOnly, move |mut repository| {
         let info = match repository.search_file_info(&bucket, &file_name) {
             Ok(f) => f,
             Err(e) => return Err(e.to_string()),
@@ -395,7 +395,7 @@ pub async fn delete_file(
     Path(id): Path<i64>,
     State(db): State<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadWrite, move |mut repository| {
+    execute(&db, Mode::ReadWrite, move |mut repository| {
         delete_file!(repository, id)
     })
 }
@@ -418,7 +418,7 @@ pub async fn search_and_delete_file(
     Path((bucket, file_name)): Path<(String, String)>,
     State(db): State<Arc<PathBuf>>,
 ) -> Result<impl IntoResponse, String> {
-    execute(db, Mode::ReadWrite, move |mut repository| match repository
+    execute(&db, Mode::ReadWrite, move |mut repository| match repository
         .search_file_info(&bucket, &file_name)
     {
         Ok(f) => delete_file!(repository, f.id),
@@ -436,7 +436,7 @@ fn make_response(result: Result<impl IntoResponse + Sized, String>) -> (StatusCo
     }
 }
 
-fn execute<F, R>(db: Arc<PathBuf>, mode: Mode, action: F) -> Result<R, String>
+fn execute<F, R>(db: &Arc<PathBuf>, mode: Mode, action: F) -> Result<R, String>
 where
     F: FnOnce(Sqlite) -> Result<R, String>,
     R: IntoResponse,
@@ -471,7 +471,7 @@ fn created<S: IntoResponse>(s: S) -> (StatusCode, Response) {
     (StatusCode::CREATED, s.into_response())
 }
 
-fn internal_server_error<E: ToString>(e: E) -> (StatusCode, Response) {
+fn internal_server_error<E: ToString>(e: &E) -> (StatusCode, Response) {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
         e.to_string().into_response(),
@@ -480,8 +480,7 @@ fn internal_server_error<E: ToString>(e: E) -> (StatusCode, Response) {
 
 async fn read_from_stream<S, E>(stream: S) -> io::Result<(Vec<u8>, usize)>
 where
-    S: Stream<Item = Result<Bytes, E>>,
-    S: StreamExt,
+    S: Stream<Item = Result<Bytes, E>> + StreamExt,
     E: Sync + std::error::Error + Send + 'static,
 {
     // Convert the stream into an `AsyncRead`.
