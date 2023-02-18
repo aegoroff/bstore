@@ -587,7 +587,7 @@ async fn get_unexist_file_content(ctx: &mut BstoreAsyncContext) {
 
     match status {
         Ok(_) => {
-            assert!(false, "Should be error but it wasn't");
+            unreachable!("Should be error but it wasn't");
         }
         Err(e) => {
             assert_eq!(StatusCode::NOT_FOUND, e.status().unwrap());
@@ -647,7 +647,7 @@ async fn search_unexist_file_content(ctx: &mut BstoreAsyncContext) {
 
     match status {
         Ok(_) => {
-            assert!(false, "Should be error but it wasn't");
+            unreachable!("Should be error but it wasn't");
         }
         Err(e) => {
             assert_eq!(StatusCode::NOT_FOUND, e.status().unwrap());
@@ -739,7 +739,7 @@ async fn delete_file_failure(ctx: &mut BstoreAsyncContext) {
     // Assert
     match status {
         Ok(_) => {
-            assert!(false, "Should be error but it wasn't");
+            unreachable!("Should be error but it wasn't");
         }
         Err(e) => {
             assert_eq!(StatusCode::NOT_FOUND, e.status().unwrap());
@@ -768,7 +768,7 @@ async fn search_and_delete_file_failure(ctx: &mut BstoreAsyncContext) {
     // Assert
     match status {
         Ok(_) => {
-            assert!(false, "Should be error but it wasn't");
+            unreachable!("Should be error but it wasn't");
         }
         Err(e) => {
             assert_eq!(StatusCode::NOT_FOUND, e.status().unwrap());
