@@ -9,6 +9,6 @@ license = "MIT"
 [dependencies]
 client = { path = "../client" }
 server = { path = "../server" }
-clap = { version = "4.1.6", features = ["std", "color", "suggestions", "cargo"] }
+clap = { version = "4.1.8", features = ["std", "color", "suggestions", "cargo"] }
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
