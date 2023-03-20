@@ -2,11 +2,6 @@ use clap::{arg, command, crate_name, Command};
 use cli::client::{insert_single_file, list_buckets};
 use client::FileParams;
 
-use mimalloc_rust::GlobalMiMalloc;
-
-#[global_allocator]
-static GLOBAL_MIMALLOC: GlobalMiMalloc = GlobalMiMalloc;
-
 mod cli;
 
 #[tokio::main]
