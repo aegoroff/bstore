@@ -18,4 +18,4 @@ urlencoding = "2.1.2"
 comfy-table = "6.1.4"
 
 [dev-dependencies]
-rstest = "0.16.0"
+rstest = "0.17.0"
