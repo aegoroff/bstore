@@ -22,8 +22,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing = "0.1"
 tower = { version = "0.4", features = ["util", "timeout"] }
 tower-http = { version = "0.4.0", features = ["add-extension", "limit", "trace"] }
-utoipa = { version = "3.1.2", features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "3.1.1", features = ["axum"] }
+utoipa = { version = "3.2.1", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "3.1.2", features = ["axum"] }
 rusqlite = { version = "0.29", features = ["bundled", "chrono", "blob"] }
 
 [dev-dependencies]
@@ -40,6 +40,6 @@ uuid = { version = "1.3.0", features = [
 ]}
 rand = "0.8.5"
 url-escape = "0.1.1"
-serial_test = "1.0.0"
+serial_test = "2.0.0"
 urlencoding = "2.1.2"
 
