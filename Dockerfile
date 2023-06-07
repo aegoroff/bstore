@@ -9,7 +9,7 @@ COPY client/ ./client/
 COPY server/ ./server/
 COPY kernel/ ./kernel/
 COPY Cargo.toml ./
-RUN cargo test --workspace --release
+RUN cargo test --workspace
 RUN cargo build --workspace --release
 
 FROM gcr.io/distroless/cc-debian11:latest
