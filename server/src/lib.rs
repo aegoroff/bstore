@@ -1,3 +1,5 @@
+#![warn(unused_extern_crates)]
+
 use std::{path::PathBuf, sync::Arc};
 
 use axum::{
@@ -19,11 +21,6 @@ pub mod file_reply;
 mod handlers;
 pub mod sqlite;
 
-extern crate serde;
-
-#[cfg(test)] // <-- not needed in integration tests
-extern crate rstest;
-
 use crate::sqlite::{Mode, Sqlite};
 use crate::{domain::Storage, file_reply::FileReply};
 use axum::Server;
@@ -38,8 +35,6 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 const DB_FILE: &str = "bstore.db";
 const CURRENT_DIR: &str = "./";
-
-extern crate tokio;
 
 pub async fn run() {
     tracing_subscriber::registry()
