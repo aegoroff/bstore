@@ -1,3 +1,6 @@
+#![warn(clippy::unwrap_in_result)]
+#![warn(clippy::unwrap_used)]
+
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 

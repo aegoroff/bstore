@@ -1,4 +1,6 @@
 #![warn(unused_extern_crates)]
+#![warn(clippy::unwrap_in_result)]
+#![warn(clippy::unwrap_used)]
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -59,16 +61,23 @@ pub async fn run() {
             .unwrap_or_default();
     }
 
-    let socket: SocketAddr = format!("0.0.0.0:{port}").parse().unwrap();
-    tracing::info!("listening on {socket}");
+    if let Ok(socket) = format!("0.0.0.0:{port}").parse::<SocketAddr>() {
+        tracing::info!("listening on {socket}");
 
-    let app = create_routes(db);
+        let app = create_routes(db);
 
-    Server::bind(&socket)
-        .serve(app.into_make_service())
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .unwrap();
+        if let Ok(r) = Server::bind(&socket)
+            .serve(app.into_make_service())
+            .with_graceful_shutdown(shutdown_signal())
+            .await
+        {
+            r
+        } else {
+            tracing::error!("Failed to start server at 0.0.0.0:{port}");
+        }
+    } else {
+        tracing::error!("Error parsing port {port}");
+    }
 }
 
 pub fn create_routes(db: PathBuf) -> Router {

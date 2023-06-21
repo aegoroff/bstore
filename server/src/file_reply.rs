@@ -39,15 +39,14 @@ impl IntoResponse for FileReply {
             HeaderValue::from_static("application/octet-stream"),
         );
         let attachment = format!(r#"attachment; filename="{file_name}""#);
-        res.headers_mut().insert(
-            "content-disposition",
-            HeaderValue::from_str(attachment.as_str()).unwrap(),
-        );
+        if let Ok(val) = HeaderValue::from_str(attachment.as_str()) {
+            res.headers_mut().insert("content-disposition", val);
+        }
         let len = self.file.size.to_string();
-        res.headers_mut().insert(
-            "Content-Length",
-            HeaderValue::from_str(len.as_str()).unwrap(),
-        );
+        if let Ok(val) = HeaderValue::from_str(len.as_str()) {
+            res.headers_mut().insert("Content-Length", val);
+        }
+
         res
     }
 }
