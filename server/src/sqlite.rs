@@ -81,11 +81,8 @@ impl Storage for Sqlite {
                 let rowid = tx.last_insert_rowid();
 
                 let mut blob = tx.blob_open(DatabaseName::Main, "blob", "data", rowid, false)?;
-                match blob.write_all(&data) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        tracing::error!("{}", e);
-                    }
+                if let Err(e) = blob.write_all(&data) {
+                    tracing::error!("{e}");
                 }
                 blob.flush().unwrap_or_default();
                 blob.close()?;
