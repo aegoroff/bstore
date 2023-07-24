@@ -29,7 +29,7 @@ impl Resource {
                     y
                 });
 
-            if path.chars().rev().next().unwrap_or_default() == SEP {
+            if path.chars().next_back().unwrap_or_default() == SEP {
                 self.url.set_path(&p);
             } else {
                 self.url.set_path(&p[..p.len() - 1]);
