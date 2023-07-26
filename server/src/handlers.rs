@@ -337,6 +337,34 @@ pub async fn get_file_content(
     make_response(result)
 }
 
+/// Gets file's information by file id
+#[utoipa::path(
+    get,
+    path = "/api/file/{id}/meta",
+    responses(
+        (status = 200, body = File),
+        (status = 404, description = "File not found", body = String)
+    ),
+    tag = "files",
+    params(
+        ("id" = i64, Path, description = "File id")
+    ),
+)]
+pub async fn get_file_info(
+    Path(id): Path<i64>,
+    State(db): State<Arc<PathBuf>>,
+) -> impl IntoResponse {
+    let result = execute(&db, Mode::ReadOnly, move |mut repository| {
+        let info = match repository.get_file_info(id) {
+            Ok(f) => f,
+            Err(e) => return Err(e.to_string()),
+        };
+
+        Ok(Json(info))
+    });
+    make_response(result)
+}
+
 /// Gets file binary content by bucket id and file path inside bucket
 #[utoipa::path(
     get,

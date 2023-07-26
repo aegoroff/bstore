@@ -595,6 +595,37 @@ async fn get_file_content(ctx: &mut BstoreAsyncContext) {
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
 #[serial]
+async fn get_file_info(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
+
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+    let result: Vec<FileItem> = client.get(uri).send().await.unwrap().json().await.unwrap();
+    let file_id = result[0].id;
+    let file_uri = format!("http://localhost:{}/api/file/{file_id}/meta", ctx.port);
+
+    // Act
+    let result: FileItem = client
+        .get(file_uri)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+
+    // Assert
+    assert_eq!(result.id, file_id);
+    assert_eq!(result.bucket, bucket.to_string());
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
 async fn get_unexist_file_content(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();

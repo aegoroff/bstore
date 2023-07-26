@@ -92,6 +92,7 @@ pub fn create_routes(db: PathBuf) -> Router {
             handlers::search_and_get_file_content,
             handlers::search_and_delete_file,
             handlers::get_file_content,
+            handlers::get_file_info,
         ),
         components(
             schemas(kernel::Bucket, kernel::File, kernel::DeleteResult),
@@ -124,6 +125,7 @@ pub fn create_routes(db: PathBuf) -> Router {
             "/api/file/:id",
             delete(handlers::delete_file).get(handlers::get_file_content),
         )
+        .route("/api/file/:id/meta", get(handlers::get_file_info))
         .layer(
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http().on_failure(
