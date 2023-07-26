@@ -1,3 +1,5 @@
+#![allow(clippy::assertions_on_constants)]
+
 use axum::Server;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Sender;
