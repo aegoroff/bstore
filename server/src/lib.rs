@@ -88,6 +88,7 @@ pub fn create_routes(db: PathBuf) -> Router {
             handlers::delete_file,
             handlers::delete_bucket,
             handlers::get_files,
+            handlers::get_last_file,
             handlers::search_and_get_file_content,
             handlers::search_and_delete_file,
             handlers::get_file_content,
@@ -111,6 +112,7 @@ pub fn create_routes(db: PathBuf) -> Router {
                 .delete(handlers::delete_bucket)
                 .get(handlers::get_files),
         )
+        .route("/api/:bucket/last", get(handlers::get_last_file))
         .route(
             "/api/:bucket/:file_name",
             post(handlers::insert_file)

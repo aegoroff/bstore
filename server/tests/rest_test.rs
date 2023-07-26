@@ -507,6 +507,35 @@ async fn get_bucket_files(ctx: &mut BstoreAsyncContext) {
 #[test_context(BstoreAsyncContext)]
 #[tokio::test]
 #[serial]
+async fn get_last_bucket_file(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
+    let uri_get = format!("http://localhost:{}/api/{bucket}/last", ctx.port);
+
+    let form = wrap_directory_into_multipart_form(&ctx.root).await.unwrap();
+
+    client.post(&uri).multipart(form).send().await.unwrap();
+
+    // Act
+    let result: Result<FileItem, reqwest::Error> =
+        client.get(uri_get).send().await.unwrap().json().await;
+
+    // Assert
+    match result {
+        Ok(x) => {
+            assert_eq!(x.id, 4);
+        }
+        Err(e) => {
+            assert!(false, "get_last_bucket_file error: {e:?}");
+        }
+    }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
 async fn get_buckets(ctx: &mut BstoreAsyncContext) {
     // Arrange
     let client = Client::new();

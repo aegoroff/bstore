@@ -273,6 +273,32 @@ pub async fn get_files(
     })
 }
 
+/// Gets last inserted file info from a bucket
+#[utoipa::path(
+    get,
+    path = "/api/{bucket}/last",
+    responses(
+        (status = 200, description = "Last file got successfully", body = File),
+        (status = 404, description = "Bucket not found", body = String)
+    ),
+    tag = "buckets",
+    params(
+        ("bucket" = String, Path, description = "Bucket id")
+    ),
+)]
+pub async fn get_last_file(
+    Path(bucket): Path<String>,
+    State(db): State<Arc<PathBuf>>,
+) -> impl IntoResponse {
+    let result = execute(&db, Mode::ReadOnly, move |mut repository| match repository
+        .get_last_file(&bucket)
+    {
+        Ok(file) => Ok(Json(file)),
+        Err(e) => Err(e.to_string()),
+    });
+    make_response(result)
+}
+
 /// Gets file binary content by file id
 #[utoipa::path(
     get,

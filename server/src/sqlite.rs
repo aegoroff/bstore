@@ -170,6 +170,26 @@ impl Storage for Sqlite {
         Ok(files.filter_map(std::result::Result::ok).collect())
     }
 
+    fn get_last_file(&mut self, bucket: &str) -> Result<File, Self::Err> {
+        self.enable_foreign_keys()?;
+        self.set_synchronous_full()?;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT file.id, file.path, file.bucket, blob.size \
+                           FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
+                           WHERE file.bucket = ?1 ORDER BY file.id DESC LIMIT 1",
+        )?;
+        stmt.query_row([bucket], |row| {
+            let file = File {
+                id: row.get(0)?,
+                path: row.get(1)?,
+                bucket: row.get(2)?,
+                size: row.get(3)?,
+            };
+            Ok(file)
+        })
+    }
+
     fn get_file_data(&self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err> {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
