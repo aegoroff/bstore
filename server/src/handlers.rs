@@ -273,7 +273,7 @@ pub async fn get_files(
     })
 }
 
-/// Gets last inserted file info from a bucket
+/// Gets last inserted file info a bucket
 #[utoipa::path(
     get,
     path = "/api/{bucket}/last",
