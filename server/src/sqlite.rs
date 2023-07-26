@@ -52,6 +52,7 @@ impl Storage for Sqlite {
         Ok(())
     }
 
+    /// inserts new file into bucket and return it's id
     fn insert_file(&mut self, path: &str, bucket: &str, data: Vec<u8>) -> Result<i64, Self::Err> {
         self.assign_cache_size()?;
         self.enable_foreign_keys()?;
