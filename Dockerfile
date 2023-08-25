@@ -1,7 +1,7 @@
 # docker image build --tag egoroff/bstore .
 
 # Build service
-FROM rust:latest as rust-build
+FROM rust:bullseye as rust-build
 RUN apt update && apt -y install lld
 COPY .cargo/ ./.cargo/
 COPY bstore/ ./bstore/
