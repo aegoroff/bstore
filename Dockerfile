@@ -13,7 +13,7 @@ RUN rustup target add x86_64-unknown-linux-musl
 RUN cargo test --workspace --target x86_64-unknown-linux-musl
 RUN cargo build --workspace --target x86_64-unknown-linux-musl --release
 
-FROM gcr.io/distroless/static-debian11:latest
+FROM gcr.io/distroless/static-debian12:latest
 ENV BSTORE_PORT=5000
 ENV BSTORE_DATA_DIR=/data/data
 ENV BSTORE_DATA_FILE=bstore.db
