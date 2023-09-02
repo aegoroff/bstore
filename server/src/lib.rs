@@ -142,6 +142,11 @@ pub fn create_routes(db: PathBuf) -> Router {
         .with_state(Arc::new(db))
 }
 
+/// .
+///
+/// # Panics
+///
+/// Panics if fail to install Ctrl+C handler
 pub async fn shutdown_signal() {
     let ctrl_c = async {
         signal::ctrl_c()
