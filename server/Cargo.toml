@@ -10,7 +10,6 @@ description = "Small microservice that implementes blob storage with SQLite back
 [dependencies]
 kernel = { path = "../kernel" }
 tokio = { workspace = true, features = ["full"] }
-chrono = { workspace = true, default-features = false, features = ["serde", "clock", "std"]}
 futures-util = "0.3"
 blake3 = "1.4"
 serde = { workspace = true, features = ["derive"] }
