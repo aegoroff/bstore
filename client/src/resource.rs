@@ -14,8 +14,8 @@ pub struct Resource {
 impl Resource {
     #[must_use]
     pub fn new(uri: &str) -> Option<Resource> {
-        let url = Url::parse(uri).ok()?;
-        Some(Resource { url })
+        let base = Url::parse(uri).ok()?;
+        Some(Resource { url: base })
     }
 
     pub fn append_path(&mut self, path: &str) -> &mut Self {
@@ -29,11 +29,12 @@ impl Resource {
                     y
                 });
 
-            if path.chars().next_back().unwrap_or_default() == SEP {
-                self.url.set_path(&p);
+            let path_to_set = if path.chars().next_back().unwrap_or_default() == SEP {
+                &p
             } else {
-                self.url.set_path(&p[..p.len() - 1]);
-            }
+                &p[..p.len() - 1]
+            };
+            self.url.set_path(path_to_set);
         } else {
             let r = self.url.join(path);
             if let Ok(u) = r {
