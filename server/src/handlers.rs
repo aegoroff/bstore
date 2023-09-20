@@ -1,3 +1,4 @@
+#![allow(clippy::unused_async)]
 use crate::domain::Storage;
 use crate::file_reply::FileReply;
 use crate::sqlite::{Mode, Sqlite};
@@ -144,7 +145,9 @@ pub async fn insert_zipped_bucket(
                                         Some(path) => path.to_owned(),
                                         None => continue,
                                     };
-                                    let Some(outpath) = outpath.to_str() else { continue };
+                                    let Some(outpath) = outpath.to_str() else {
+                                        continue;
+                                    };
 
                                     let mut writer: Vec<u8> =
                                         Vec::with_capacity(zip_file.size() as usize);
