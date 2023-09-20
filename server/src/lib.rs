@@ -77,9 +77,8 @@ pub async fn run() {
     }
 }
 
-pub fn create_routes(db: PathBuf) -> Router {
-    #[derive(OpenApi)]
-    #[openapi(
+#[derive(OpenApi)]
+#[openapi(
         paths(
             handlers::get_buckets,
             handlers::insert_many_from_form,
@@ -102,8 +101,9 @@ pub fn create_routes(db: PathBuf) -> Router {
             (name = "bstore", description = "Bstore API")
         )
     )]
-    struct ApiDoc;
+struct ApiDoc;
 
+pub fn create_routes(db: PathBuf) -> Router {
     Router::new()
         .merge(SwaggerUi::new("/swagger").url("/api-doc/openapi.json", ApiDoc::openapi()))
         .route("/api/", get(handlers::get_buckets))
