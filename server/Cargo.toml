@@ -22,7 +22,7 @@ tracing = "0.1"
 tower = { version = "0.4.13", features = ["util", "timeout"] }
 tower-http = { version = "0.4.4", features = ["add-extension", "limit", "trace"] }
 utoipa = { workspace = true, features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "3.1.5", features = ["axum"] }
+utoipa-swagger-ui = { version = "4.0.0", features = ["axum"] }
 rusqlite = { version = "0.29", features = ["bundled", "chrono", "blob"] }
 
 [dev-dependencies]
