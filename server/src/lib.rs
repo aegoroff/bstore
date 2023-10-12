@@ -1,6 +1,8 @@
 #![warn(unused_extern_crates)]
 #![warn(clippy::unwrap_in_result)]
 #![warn(clippy::unwrap_used)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
 
 use std::{path::PathBuf, sync::Arc};
 

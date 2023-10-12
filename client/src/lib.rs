@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
 use std::path::PathBuf;
 
 use comfy_table::{presets::UTF8_HORIZONTAL_ONLY, Attribute, Cell, ContentArrangement, Table};
