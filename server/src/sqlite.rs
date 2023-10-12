@@ -73,7 +73,8 @@ impl Storage for Sqlite {
                 // Insert only uniqueue blob so as not to have duplicates.
                 // If binary data already in DB just link existing
                 // data with new file item
-                let len = data.len() as i32;
+                // ZeroBlob accepts only i32 so max file size limited to 2GB
+                let len = i32::try_from(data.len()).unwrap_or(i32::MAX);
                 tx.execute(
                     "INSERT INTO blob (blake3_hash, data, size) VALUES (?1, ?2, ?3)",
                     params![&hash, &ZeroBlob(len), len],

@@ -149,8 +149,10 @@ pub async fn insert_zipped_bucket(
                                         continue;
                                     };
 
-                                    let mut writer: Vec<u8> =
-                                        Vec::with_capacity(zip_file.size() as usize);
+                                    let Ok(capacity) = usize::try_from(zip_file.size()) else {
+                                        continue;
+                                    };
+                                    let mut writer: Vec<u8> = Vec::with_capacity(capacity);
                                     match std::io::copy(&mut zip_file, &mut writer) {
                                         Ok(r) => {
                                             let insert_result =
@@ -547,5 +549,6 @@ where
     let mut buffer = Vec::new();
 
     let copied_bytes = tokio::io::copy(&mut body_reader, &mut buffer).await?;
-    Ok((buffer, copied_bytes as usize))
+    let copied_bytes = usize::try_from(copied_bytes).unwrap_or(usize::MAX);
+    Ok((buffer, copied_bytes))
 }
