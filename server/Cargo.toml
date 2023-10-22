@@ -32,7 +32,7 @@ serde_json = { workspace = true }
 http = "0.2.9"
 test-context = "0.1.4"
 async-trait = "0.1"
-uuid = { version = "1.4.1", features = [
+uuid = { version = "1.5.0", features = [
     "v4",                # Lets you generate random UUIDs
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
     "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
