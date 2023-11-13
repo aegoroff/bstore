@@ -23,13 +23,13 @@ tower = { version = "0.4.13", features = ["util", "timeout"] }
 tower-http = { version = "0.4.4", features = ["add-extension", "limit", "trace"] }
 utoipa = { workspace = true, features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "4.0.0", features = ["axum"] }
-rusqlite = { version = "0.29", features = ["bundled", "chrono", "blob"] }
+rusqlite = { version = "0.30", features = ["bundled", "chrono", "blob"] }
 
 [dev-dependencies]
 rstest = "0.18.2"
 reqwest = { workspace = true, features = ["json", "multipart", "stream"] }
 serde_json = { workspace = true }
-http = "0.2.9"
+http = "0.2.10"
 test-context = "0.1.4"
 async-trait = "0.1"
 uuid = { version = "1.5.0", features = [
