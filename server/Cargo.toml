@@ -29,7 +29,6 @@ rusqlite = { version = "0.30", features = ["bundled", "chrono", "blob"] }
 rstest = "0.18.2"
 reqwest = { workspace = true, features = ["json", "multipart", "stream"] }
 serde_json = { workspace = true }
-http = "0.2.10"
 test-context = "0.1.4"
 async-trait = "0.1"
 uuid = { version = "1.5.0", features = [

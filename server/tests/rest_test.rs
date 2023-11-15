@@ -5,12 +5,12 @@ use futures::channel::oneshot;
 use futures::channel::oneshot::Sender;
 use futures::future::join_all;
 use futures::TryStreamExt;
-use http::StatusCode;
 use kernel::Bucket;
 use kernel::DeleteResult;
 use kernel::File as FileItem;
 use rand::Rng;
 use reqwest::Client;
+use reqwest::StatusCode;
 use serial_test::serial;
 use server::domain::Storage;
 use server::sqlite::Mode;
@@ -251,7 +251,7 @@ async fn insert_many_from_form(ctx: &mut BstoreAsyncContext) {
     // Assert
     match result {
         Ok(x) => {
-            assert_eq!(x.status(), http::status::StatusCode::CREATED);
+            assert_eq!(x.status(), StatusCode::CREATED);
             let r: Result<Vec<i64>, reqwest::Error> = x.json().await;
             let r = r.unwrap();
             assert_eq!(4, r.len());
@@ -287,7 +287,7 @@ async fn insert_one(ctx: &mut BstoreAsyncContext) {
     // Assert
     match result {
         Ok(x) => {
-            assert_eq!(x.status(), http::status::StatusCode::CREATED);
+            assert_eq!(x.status(), StatusCode::CREATED);
             let r: Result<Vec<i64>, reqwest::Error> = x.json().await;
             let r = r.unwrap();
             assert_eq!(1, r.len());
@@ -324,7 +324,7 @@ async fn insert_one_that_zero_lengh(ctx: &mut BstoreAsyncContext) {
     // Assert
     match result {
         Ok(x) => {
-            assert_eq!(x.status(), http::status::StatusCode::CREATED);
+            assert_eq!(x.status(), StatusCode::CREATED);
             let r: Result<Vec<i64>, reqwest::Error> = x.json().await;
             let r = r.unwrap();
             assert_eq!(1, r.len());
@@ -363,7 +363,7 @@ async fn insert_zip(ctx: &mut BstoreAsyncContext) {
         .unwrap_or_default();
     match result {
         Ok(x) => {
-            assert_eq!(x.status(), http::status::StatusCode::CREATED);
+            assert_eq!(x.status(), StatusCode::CREATED);
             let r: Result<Vec<i64>, reqwest::Error> = x.json().await;
             let r = r.unwrap();
             assert_eq!(4, r.len());
@@ -398,7 +398,7 @@ async fn insert_many_from_form_concurrently(ctx: &mut BstoreAsyncContext) {
             // Assert
             match result {
                 Ok(x) => {
-                    assert_eq!(x.status(), http::status::StatusCode::CREATED);
+                    assert_eq!(x.status(), StatusCode::CREATED);
                 }
                 Err(e) => {
                     assert!(false, "insert_many_from_form_concurrently error: {e}");
