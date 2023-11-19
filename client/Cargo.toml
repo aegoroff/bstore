@@ -19,3 +19,6 @@ comfy-table = "7.1.0"
 
 [dev-dependencies]
 rstest = "0.18.2"
+
+[lints]
+workspace = true

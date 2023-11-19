@@ -9,3 +9,6 @@ license = "MIT"
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 utoipa = { workspace = true }
+
+[lints]
+workspace = true

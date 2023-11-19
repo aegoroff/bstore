@@ -12,3 +12,6 @@ server = { path = "../server" }
 clap = { version = "4.4.8", features = ["std", "color", "suggestions", "cargo"] }
 serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true
