@@ -154,7 +154,7 @@ impl Storage for Sqlite {
         self.set_synchronous_full()?;
 
         let mut stmt = self.conn.prepare(
-            "SELECT file.id, file.path, file.bucket, blob.size \
+            "SELECT file.id, file.path, file.bucket, blob.size, file.blake3_hash \
                            FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
                            WHERE file.bucket = ?1",
         )?;
@@ -164,6 +164,7 @@ impl Storage for Sqlite {
                 path: row.get(1)?,
                 bucket: row.get(2)?,
                 size: row.get(3)?,
+                blake3_hash: row.get(4)?,
             };
             Ok(file)
         })?;
@@ -176,7 +177,7 @@ impl Storage for Sqlite {
         self.set_synchronous_full()?;
 
         let mut stmt = self.conn.prepare(
-            "SELECT file.id, file.path, file.bucket, blob.size \
+            "SELECT file.id, file.path, file.bucket, blob.size, file.blake3_hash \
                            FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
                            WHERE file.bucket = ?1 ORDER BY file.id DESC LIMIT 1",
         )?;
@@ -186,6 +187,7 @@ impl Storage for Sqlite {
                 path: row.get(1)?,
                 bucket: row.get(2)?,
                 size: row.get(3)?,
+                blake3_hash: row.get(4)?,
             };
             Ok(file)
         })
@@ -209,7 +211,7 @@ impl Storage for Sqlite {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
-        let mut stmt = self.conn.prepare("SELECT file.id, file.path, file.bucket, blob.size \
+        let mut stmt = self.conn.prepare("SELECT file.id, file.path, file.bucket, blob.size, file.blake3_hash \
                                                        FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
                                                        WHERE id = ?1")?;
         let result: File = stmt.query_row([id], |r| {
@@ -218,6 +220,7 @@ impl Storage for Sqlite {
                 path: r.get(1)?,
                 bucket: r.get(2)?,
                 size: r.get(3)?,
+                blake3_hash: r.get(4)?,
             })
         })?;
         stmt.finalize()?;
@@ -229,7 +232,7 @@ impl Storage for Sqlite {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
-        let mut stmt = self.conn.prepare("SELECT file.id, file.path, file.bucket, blob.size \
+        let mut stmt = self.conn.prepare("SELECT file.id, file.path, file.bucket, blob.size, file.blake3_hash \
                                                        FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
                                                        WHERE bucket = ?1 AND path = ?2")?;
         let result: File = stmt.query_row([bucket, path], |r| {
@@ -238,6 +241,7 @@ impl Storage for Sqlite {
                 path: r.get(1)?,
                 bucket: r.get(2)?,
                 size: r.get(3)?,
+                blake3_hash: r.get(4)?,
             })
         })?;
         stmt.finalize()?;

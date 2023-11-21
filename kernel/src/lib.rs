@@ -15,6 +15,7 @@ pub struct File {
     pub id: i64,
     pub path: String,
     pub bucket: String,
+    pub blake3_hash: String,
     pub size: usize,
 }
 

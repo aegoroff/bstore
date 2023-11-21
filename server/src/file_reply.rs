@@ -91,6 +91,7 @@ mod tests {
             id: 1,
             path: path.to_owned(),
             bucket: String::new(),
+            blake3_hash: String::new(),
             size: 1,
         };
         let reply = FileReply::new(Vec::new(), file);
