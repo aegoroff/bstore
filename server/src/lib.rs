@@ -27,7 +27,6 @@ pub mod sqlite;
 
 use crate::sqlite::{Mode, Sqlite};
 use crate::{domain::Storage, file_reply::FileReply};
-use axum::Server;
 use std::env;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -68,14 +67,14 @@ pub async fn run() {
 
     let app = create_routes(db);
 
-    if let Ok(r) = Server::bind(&socket)
-        .serve(app.into_make_service())
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-    {
-        r
+    if let Ok(listener) = tokio::net::TcpListener::bind(socket).await {
+        if let Ok(r) = axum::serve(listener, app.into_make_service()).await {
+            r
+        } else {
+            tracing::error!("Failed to start server at 0.0.0.0:{}", port);
+        }
     } else {
-        tracing::error!("Failed to start server at 0.0.0.0:{port}");
+        tracing::error!("Failed to start server at 0.0.0.0:{}", port);
     }
 }
 

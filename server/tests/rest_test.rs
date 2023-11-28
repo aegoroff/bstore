@@ -1,6 +1,5 @@
 #![allow(clippy::assertions_on_constants)]
 
-use axum::Server;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Sender;
 use futures::future::join_all;
@@ -208,11 +207,17 @@ impl AsyncTestContext for BstoreAsyncContext {
         let task = tokio::spawn(async move {
             let app = server::create_routes(cloned_db);
             let socket: SocketAddr = format!("0.0.0.0:{cloned_port}").parse().unwrap();
-            Server::bind(&socket)
-                .serve(app.into_make_service())
-                .with_graceful_shutdown(async { recv.await.unwrap() })
-                .await
-                .unwrap()
+
+            if let Ok(listener) = tokio::net::TcpListener::bind(socket).await {
+                if let Ok(r) = axum::serve(listener, app.into_make_service()).await {
+                    r
+                } else {
+                    tracing::error!("Failed to start server at 0.0.0.0:{}", cloned_port);
+                }
+            } else {
+                tracing::error!("Failed to start server at 0.0.0.0:{}", cloned_port);
+            }
+            recv.await.unwrap()
         });
 
         BstoreAsyncContext {

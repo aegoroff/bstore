@@ -1,5 +1,5 @@
 use axum::{
-    body::Full,
+    body::Body,
     http::HeaderValue,
     response::{IntoResponse, Response},
 };
@@ -33,7 +33,7 @@ impl FileReply {
 impl IntoResponse for FileReply {
     fn into_response(self) -> Response {
         let file_name = self.name_from_path().to_owned();
-        let mut res = Full::from(self.data).into_response();
+        let mut res = Body::from(self.data).into_response();
         res.headers_mut().insert(
             "content-type",
             HeaderValue::from_static("application/octet-stream"),

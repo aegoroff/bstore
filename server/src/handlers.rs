@@ -2,8 +2,8 @@
 use crate::domain::Storage;
 use crate::file_reply::FileReply;
 use crate::sqlite::{Mode, Sqlite};
-use axum::body::Bytes;
-use axum::extract::{BodyStream, State};
+use axum::body::{Body, Bytes};
+use axum::extract::State;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::{Stream, TryStreamExt};
@@ -86,9 +86,9 @@ pub async fn insert_many_from_form(
 pub async fn insert_file(
     Path((bucket, file_name)): Path<(String, String)>,
     State(db): State<Arc<PathBuf>>,
-    body: BodyStream,
+    body: Body,
 ) -> Result<impl IntoResponse, String> {
-    match read_from_stream(body).await {
+    match read_from_stream(body.into_data_stream()).await {
         Ok((result, read_bytes)) => {
             execute(&db, Mode::ReadWrite, move |mut repository| {
                 let mut inserted: Vec<i64> = vec![];
@@ -125,9 +125,9 @@ pub async fn insert_file(
 pub async fn insert_zipped_bucket(
     Path(bucket): Path<String>,
     State(db): State<Arc<PathBuf>>,
-    body: BodyStream,
+    body: Body,
 ) -> Result<impl IntoResponse, String> {
-    match read_from_stream(body).await {
+    match read_from_stream(body.into_data_stream()).await {
         Ok((data, _)) => {
             execute(&db, Mode::ReadWrite, move |mut repository| {
                 let mut inserted: Vec<i64> = vec![];

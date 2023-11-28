@@ -14,16 +14,18 @@ futures-util = "0.3"
 blake3 = "1.5"
 serde = { workspace = true, features = ["derive"] }
 zip = "0.6.6"
-axum = { version = "0.6.20", features = ["multipart"] }
+axum = { version = "0.7.1", features = ["multipart"] }
 tokio-util = { workspace = true, features = ["full"] }
 futures = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing = "0.1"
 tower = { version = "0.4.13", features = ["util", "timeout"] }
-tower-http = { version = "0.4.4", features = ["add-extension", "limit", "trace"] }
+tower-http = { version = "0.5.0", features = ["add-extension", "limit", "trace"] }
 utoipa = { workspace = true, features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "4.0.0", features = ["axum"] }
+utoipa-swagger-ui = { version = "5.0.0", features = ["axum"] }
 rusqlite = { version = "0.30", features = ["bundled", "chrono", "blob"] }
+hyper = { version = "1.0.1", features = [] }
+hyper-util = { version = "0.1.1", features = ["tokio", "server-auto", "http1"] }
 
 [dev-dependencies]
 rstest = "0.18.2"
@@ -31,7 +33,7 @@ reqwest = { workspace = true, features = ["json", "multipart", "stream"] }
 serde_json = { workspace = true }
 test-context = "0.1.4"
 async-trait = "0.1"
-uuid = { version = "1.5.0", features = [
+uuid = { version = "1.6.1", features = [
     "v4",                # Lets you generate random UUIDs
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
     "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
