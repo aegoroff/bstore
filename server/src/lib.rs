@@ -7,13 +7,17 @@
 use std::{path::PathBuf, sync::Arc};
 
 use axum::{
-    extract::DefaultBodyLimit,
+    extract::{DefaultBodyLimit, Request},
     routing::post,
     routing::{delete, get},
     Router,
 };
+use hyper::body::Incoming;
+use hyper_util::rt::TokioIo;
 use std::time::Duration;
 use tokio::signal;
+use tokio::sync::watch;
+use tower::Service;
 use tower::ServiceBuilder;
 use tower_http::{
     classify::ServerErrorsFailureClass, limit::RequestBodyLimitLayer, trace::TraceLayer,
@@ -67,14 +71,76 @@ pub async fn run() {
 
     let app = create_routes(db);
 
+    let (close_tx, close_rx) = watch::channel(());
+
     if let Ok(listener) = tokio::net::TcpListener::bind(socket).await {
-        if let Ok(r) = axum::serve(listener, app.into_make_service()).await {
-            r
-        } else {
-            tracing::error!("Failed to start server at 0.0.0.0:{}", port);
+        loop {
+            let (socket, _remote_addr) = tokio::select! {
+                result = listener.accept() => {
+                    match result {
+                        Ok(r) => r,
+                        Err(e) => {
+                            tracing::error!("failed to serve connection: {e:#}");
+                            continue;
+                        },
+                    }
+                }
+                _ = shutdown_signal() => {
+                    break;
+                }
+            };
+
+            // We don't need to call `poll_ready` because `Router` is always ready.
+            let tower_service = app.clone();
+
+            let close_rx = close_rx.clone();
+
+            tokio::spawn(async move {
+                let socket = TokioIo::new(socket);
+
+                // Hyper also has its own `Service` trait and doesn't use tower. We can use
+                // `hyper::service::service_fn` to create a hyper `Service` that calls our app through
+                // `tower::Service::call`.
+                let hyper_service =
+                    hyper::service::service_fn(move |request: Request<Incoming>| {
+                        // We have to clone `tower_service` because hyper's `Service` uses `&self` whereas
+                        // tower's `Service` requires `&mut self`.
+                        //
+                        // We don't need to call `poll_ready` since `Router` is always ready.
+                        tower_service.clone().call(request)
+                    });
+
+                // `hyper_util::server::conn::auto::Builder` supports both http1 and http2 but doesn't
+                // support graceful so we have to use hyper directly and unfortunately pick between
+                // http1 and http2.
+                let conn = hyper::server::conn::http1::Builder::new()
+                    .serve_connection(socket, hyper_service)
+                    // `with_upgrades` is required for websockets.
+                    .with_upgrades();
+
+                let mut conn = std::pin::pin!(conn);
+
+                loop {
+                    tokio::select! {
+                        result = conn.as_mut() => {
+                            if let Err(err) = result {
+                                tracing::error!("failed to serve connection: {err:#}");
+                            }
+                            break;
+                        }
+                        _ = shutdown_signal() => {
+                            conn.as_mut().graceful_shutdown();
+                        }
+                    }
+                }
+                drop(close_rx);
+            });
         }
+        drop(close_rx);
+        drop(listener);
+        close_tx.closed().await;
     } else {
-        tracing::error!("Failed to start server at 0.0.0.0:{}", port);
+        tracing::error!("Failed to start server at 0.0.0.0:{port}");
     }
 }
 
