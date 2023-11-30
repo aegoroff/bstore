@@ -128,7 +128,7 @@ pub async fn run() {
                             }
                             break;
                         }
-                        _ = shutdown_signal() => {
+                        () = shutdown_signal() => {
                             conn.as_mut().graceful_shutdown();
                         }
                     }
