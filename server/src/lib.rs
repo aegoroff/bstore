@@ -80,7 +80,7 @@ pub async fn run() {
                     match result {
                         Ok(r) => r,
                         Err(e) => {
-                            tracing::error!("failed to serve connection: {e:#}");
+                            tracing::error!("failed to accept connection: {e:#}");
                             continue;
                         },
                     }
