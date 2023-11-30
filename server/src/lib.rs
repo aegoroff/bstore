@@ -85,7 +85,7 @@ pub async fn run() {
                         },
                     }
                 }
-                _ = shutdown_signal() => {
+                () = shutdown_signal() => {
                     break;
                 }
             };
