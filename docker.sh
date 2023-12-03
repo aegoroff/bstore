@@ -1,5 +1,5 @@
 #!/bin/bash
 
 tag="egoroff/bstore"
-docker build . -t $tag
+DOCKER_BUILDKIT=1 docker build . -t $tag
 docker push $tag
