@@ -90,7 +90,6 @@ pub async fn run() {
                 }
             };
 
-            // We don't need to call `poll_ready` because `Router` is always ready.
             let tower_service = app.clone();
 
             let close_rx = close_rx.clone();
@@ -103,16 +102,9 @@ pub async fn run() {
                 // `tower::Service::call`.
                 let hyper_service =
                     hyper::service::service_fn(move |request: Request<Incoming>| {
-                        // We have to clone `tower_service` because hyper's `Service` uses `&self` whereas
-                        // tower's `Service` requires `&mut self`.
-                        //
-                        // We don't need to call `poll_ready` since `Router` is always ready.
                         tower_service.clone().call(request)
                     });
 
-                // `hyper_util::server::conn::auto::Builder` supports both http1 and http2 but doesn't
-                // support graceful so we have to use hyper directly and unfortunately pick between
-                // http1 and http2.
                 let conn = hyper::server::conn::http1::Builder::new()
                     .serve_connection(client_socket, hyper_service)
                     // `with_upgrades` is required for websockets.
