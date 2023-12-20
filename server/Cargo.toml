@@ -24,7 +24,7 @@ tower-http = { version = "0.5.0", features = ["add-extension", "limit", "trace"]
 utoipa = { workspace = true, features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "5.0.0", features = ["axum"] }
 rusqlite = { version = "0.30", features = ["bundled", "chrono", "blob"] }
-hyper = { version = "1.0.1", features = [] }
+hyper = { version = "1.1.0", features = [] }
 hyper-util = { version = "0.1.1", features = ["tokio", "server-auto", "http1"] }
 
 [dev-dependencies]
