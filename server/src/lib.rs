@@ -75,6 +75,7 @@ pub async fn run() {
 
     if let Ok(listener) = tokio::net::TcpListener::bind(listen_socket).await {
         loop {
+            // Accept connections
             let (client_stream, _remote_addr) = tokio::select! {
                 result = listener.accept() => {
                     match result {
@@ -90,6 +91,7 @@ pub async fn run() {
                 }
             };
 
+            // Serve accepted connections
             let tower_service = app.clone();
 
             let close_rx = close_rx.clone();
