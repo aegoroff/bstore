@@ -165,28 +165,34 @@ pub async fn run() {
 struct ApiDoc;
 
 pub fn create_routes(db: PathBuf) -> Router {
-    Router::new()
-        .merge(SwaggerUi::new("/swagger").url("/api-doc/openapi.json", ApiDoc::openapi()))
-        .route("/api/", get(handlers::get_buckets))
+    let file_api = Router::new()
         .route(
-            "/api/:bucket",
+            "/:id",
+            delete(handlers::delete_file).get(handlers::get_file_content),
+        )
+        .route("/:id/meta", get(handlers::get_file_info));
+
+    let api = Router::new()
+        .route("/", get(handlers::get_buckets))
+        .route(
+            "/:bucket",
             post(handlers::insert_many_from_form)
                 .delete(handlers::delete_bucket)
                 .get(handlers::get_files),
         )
-        .route("/api/:bucket/last", get(handlers::get_last_file))
+        .route("/:bucket/last", get(handlers::get_last_file))
         .route(
-            "/api/:bucket/:file_name",
+            "/:bucket/:file_name",
             post(handlers::insert_file)
                 .get(handlers::search_and_get_file_content)
                 .delete(handlers::search_and_delete_file),
         )
-        .route("/api/:bucket/zip", post(handlers::insert_zipped_bucket))
-        .route(
-            "/api/file/:id",
-            delete(handlers::delete_file).get(handlers::get_file_content),
-        )
-        .route("/api/file/:id/meta", get(handlers::get_file_info))
+        .route("/:bucket/zip", post(handlers::insert_zipped_bucket))
+        .nest("/file/", file_api);
+
+    Router::new()
+        .merge(SwaggerUi::new("/swagger").url("/api-doc/openapi.json", ApiDoc::openapi()))
+        .nest("/api/", api)
         .layer(
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http().on_failure(
