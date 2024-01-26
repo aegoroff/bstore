@@ -1,10 +1,9 @@
 #![allow(clippy::assertions_on_constants)]
 
-use axum::extract::Request;
+use futures::channel::oneshot;
+use futures::channel::oneshot::Sender;
 use futures::future::join_all;
 use futures::TryStreamExt;
-use hyper::body::Incoming;
-use hyper_util::rt::TokioIo;
 use kernel::Bucket;
 use kernel::DeleteResult;
 use kernel::File as FileItem;
@@ -20,21 +19,14 @@ use std::io;
 use std::io::Read;
 use std::io::Seek;
 use std::io::Write;
-use std::net::SocketAddr;
-use std::net::TcpListener;
 use std::path::Path;
-use std::sync::Arc;
 use std::{env, path::PathBuf};
 use test_context::{test_context, AsyncTestContext};
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::watch;
-use tokio::sync::Mutex;
+use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio::{fs::File, io::AsyncWriteExt, io::BufWriter};
 use tokio_util::io::ReaderStream;
 use tokio_util::io::StreamReader;
-use tower::Service;
 use urlencoding::encode;
 use uuid::Uuid;
 use zip::write::FileOptions;
@@ -49,7 +41,7 @@ struct BstoreAsyncContext {
     root: PathBuf,
     db: PathBuf,
     port: String,
-    shutdown: UnboundedSender<()>,
+    shutdown: Sender<()>,
     join: JoinHandle<()>,
 }
 
@@ -133,17 +125,17 @@ where
     Result::Ok(())
 }
 
-fn get_available_port() -> Option<u16> {
+async fn get_available_port() -> Option<u16> {
     loop {
         let port = rand::thread_rng().gen_range(8000..9000);
-        if port_is_available(port) {
+        if port_is_available(port).await {
             return Some(port);
         }
     }
 }
 
-fn port_is_available(port: u16) -> bool {
-    TcpListener::bind(("0.0.0.0", port)).is_ok()
+async fn port_is_available(port: u16) -> bool {
+    TcpListener::bind(("0.0.0.0", port)).await.is_ok()
 }
 
 impl BstoreAsyncContext {
@@ -200,80 +192,28 @@ impl AsyncTestContext for BstoreAsyncContext {
 
         let mut port = 0;
 
-        if let Some(available_port) = get_available_port() {
+        if let Some(available_port) = get_available_port().await {
             println!("port `{available_port}` is available");
             port = available_port;
         }
 
         let port = port.to_string();
 
-        let (send, recv) = mpsc::unbounded_channel();
-        let recv = Arc::new(Mutex::new(recv));
+        let (send, recv) = oneshot::channel::<()>();
 
         let cloned_db = db.clone();
         let cloned_port = port.clone();
+
+        let listener = TcpListener::bind(format!("0.0.0.0:{cloned_port}"))
+            .await
+            .unwrap();
+
         let task = tokio::spawn(async move {
             let app = server::create_routes(cloned_db);
-            let listen_socket: SocketAddr = format!("0.0.0.0:{cloned_port}").parse().unwrap();
-
-            let (close_tx, close_rx) = watch::channel(());
-
-            if let Ok(listener) = tokio::net::TcpListener::bind(listen_socket).await {
-                loop {
-                    let recv = recv.clone();
-                    let (client_stream, _remote_addr) = tokio::select! {
-                        result = listener.accept() => {
-                            match result {
-                                Ok(r) => r,
-                                Err(e) => {
-                                    tracing::error!("failed to accept connection: {e:#}");
-                                    continue;
-                                },
-                            }
-                        }
-                        _ = async { recv.lock().await.recv().await } => {
-                            break;
-                        }
-                    };
-
-                    let tower_service = app.clone();
-
-                    let close_rx = close_rx.clone();
-
-                    tokio::spawn(async move {
-                        let client_socket = TokioIo::new(client_stream);
-                        let hyper_service =
-                            hyper::service::service_fn(move |request: Request<Incoming>| {
-                                tower_service.clone().call(request)
-                            });
-                        let conn = hyper::server::conn::http1::Builder::new()
-                            .serve_connection(client_socket, hyper_service)
-                            .with_upgrades();
-
-                        let mut conn = std::pin::pin!(conn);
-
-                        loop {
-                            tokio::select! {
-                                result = conn.as_mut() => {
-                                    if let Err(err) = result {
-                                        tracing::error!("failed to serve connection: {err:#}");
-                                    }
-                                    break;
-                                }
-                                _ = async { recv.lock().await.recv().await } => {
-                                    conn.as_mut().graceful_shutdown();
-                                }
-                            }
-                        }
-                        drop(close_rx);
-                    });
-                }
-                drop(close_rx);
-                drop(listener);
-                close_tx.closed().await;
-            } else {
-                tracing::error!("Failed to start server at 0.0.0.0:{cloned_port}");
-            }
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async { recv.await.unwrap() })
+                .await
+                .unwrap();
         });
 
         BstoreAsyncContext {
