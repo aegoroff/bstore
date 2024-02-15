@@ -67,11 +67,16 @@ pub async fn run() {
 
     let app = create_routes(db);
 
-    let listener = tokio::net::TcpListener::bind(listen_socket).await.unwrap();
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .unwrap();
+    if let Ok(listener) = tokio::net::TcpListener::bind(listen_socket).await {
+        if let Err(e) = axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal())
+            .await
+        {
+            tracing::error!("Sever run failed with: {e}")
+        }
+    } else {
+        tracing::error!("Failed to start server at 0.0.0.0:{port}");
+    }
 }
 
 #[derive(OpenApi)]
