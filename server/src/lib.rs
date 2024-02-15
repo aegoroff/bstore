@@ -7,17 +7,13 @@
 use std::{path::PathBuf, sync::Arc};
 
 use axum::{
-    extract::{DefaultBodyLimit, Request},
+    extract::DefaultBodyLimit,
     routing::post,
     routing::{delete, get},
     Router,
 };
-use hyper::body::Incoming;
-use hyper_util::rt::TokioIo;
 use std::time::Duration;
 use tokio::signal;
-use tokio::sync::watch;
-use tower::Service;
 use tower::ServiceBuilder;
 use tower_http::{
     classify::ServerErrorsFailureClass, limit::RequestBodyLimitLayer, trace::TraceLayer,
@@ -71,71 +67,11 @@ pub async fn run() {
 
     let app = create_routes(db);
 
-    let (close_tx, close_rx) = watch::channel(());
-
-    if let Ok(listener) = tokio::net::TcpListener::bind(listen_socket).await {
-        loop {
-            // Accept connections
-            let (client_stream, _remote_addr) = tokio::select! {
-                result = listener.accept() => {
-                    match result {
-                        Ok(r) => r,
-                        Err(e) => {
-                            tracing::error!("failed to accept connection: {e:#}");
-                            continue;
-                        },
-                    }
-                }
-                () = shutdown_signal() => {
-                    break;
-                }
-            };
-
-            // Serve accepted connections
-            let tower_service = app.clone();
-
-            let close_rx = close_rx.clone();
-
-            tokio::spawn(async move {
-                let client_socket = TokioIo::new(client_stream);
-
-                // Hyper also has its own `Service` trait and doesn't use tower. We can use
-                // `hyper::service::service_fn` to create a hyper `Service` that calls our app through
-                // `tower::Service::call`.
-                let hyper_service =
-                    hyper::service::service_fn(move |request: Request<Incoming>| {
-                        tower_service.clone().call(request)
-                    });
-
-                let conn = hyper::server::conn::http1::Builder::new()
-                    .serve_connection(client_socket, hyper_service)
-                    // `with_upgrades` is required for websockets.
-                    .with_upgrades();
-
-                let mut conn = std::pin::pin!(conn);
-
-                loop {
-                    tokio::select! {
-                        result = conn.as_mut() => {
-                            if let Err(err) = result {
-                                tracing::error!("failed to serve connection: {err:#}");
-                            }
-                            break;
-                        }
-                        () = shutdown_signal() => {
-                            conn.as_mut().graceful_shutdown();
-                        }
-                    }
-                }
-                drop(close_rx);
-            });
-        }
-        drop(close_rx);
-        drop(listener);
-        close_tx.closed().await;
-    } else {
-        tracing::error!("Failed to start server at 0.0.0.0:{port}");
-    }
+    let listener = tokio::net::TcpListener::bind(listen_socket).await.unwrap();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .unwrap();
 }
 
 #[derive(OpenApi)]
@@ -219,6 +155,7 @@ pub async fn shutdown_signal() {
         signal::ctrl_c()
             .await
             .expect("failed to install Ctrl+C handler");
+        tracing::info!("ctrl_c signal received in task, starting graceful shutdown");
     };
 
     #[cfg(unix)]
@@ -227,6 +164,7 @@ pub async fn shutdown_signal() {
             .expect("failed to install signal handler")
             .recv()
             .await;
+        tracing::info!("terminate signal received in task, starting graceful shutdown");
     };
 
     #[cfg(not(unix))]
