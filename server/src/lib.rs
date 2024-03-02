@@ -72,7 +72,7 @@ pub async fn run() {
             .with_graceful_shutdown(shutdown_signal())
             .await
         {
-            tracing::error!("Sever run failed with: {e}")
+            tracing::error!("Sever run failed with: {e}");
         }
     } else {
         tracing::error!("Failed to start server at 0.0.0.0:{port}");
