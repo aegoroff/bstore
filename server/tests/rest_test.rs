@@ -151,7 +151,6 @@ impl BstoreAsyncContext {
     }
 }
 
-#[async_trait::async_trait]
 impl AsyncTestContext for BstoreAsyncContext {
     async fn setup() -> BstoreAsyncContext {
         let tmp_dir = env::temp_dir();
