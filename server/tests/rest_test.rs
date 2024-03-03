@@ -144,8 +144,8 @@ impl BstoreAsyncContext {
             .await
             .unwrap_or_default();
         let base_db_file = db_path.as_os_str().to_str().unwrap().to_owned();
-        let chm_file = base_db_file.clone() + "-shm";
-        let wal_file = base_db_file + "-wal";
+        let chm_file = format!("{base_db_file}-shm");
+        let wal_file = format!("{base_db_file}-wal");
         tokio::fs::remove_file(chm_file).await.unwrap_or_default();
         tokio::fs::remove_file(wal_file).await.unwrap_or_default();
     }
