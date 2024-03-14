@@ -3,7 +3,7 @@ use std::path::Path;
 
 use kernel::{Bucket, DeleteResult, File};
 use rusqlite::blob::ZeroBlob;
-use rusqlite::{params, Connection, DatabaseName, Error, ErrorCode, OpenFlags, Transaction};
+use rusqlite::{params, Connection, DatabaseName, Error, ErrorCode, OpenFlags, Row, Transaction};
 
 use crate::domain::Storage;
 
@@ -158,16 +158,7 @@ impl Storage for Sqlite {
                            FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
                            WHERE file.bucket = ?1",
         )?;
-        let files = stmt.query_map([bucket], |row| {
-            let file = File {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                bucket: row.get(2)?,
-                size: row.get(3)?,
-                blake3_hash: row.get(4)?,
-            };
-            Ok(file)
-        })?;
+        let files = stmt.query_map([bucket], Sqlite::to_file)?;
 
         Ok(files.filter_map(std::result::Result::ok).collect())
     }
@@ -181,16 +172,7 @@ impl Storage for Sqlite {
                            FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
                            WHERE file.bucket = ?1 ORDER BY file.id DESC LIMIT 1",
         )?;
-        stmt.query_row([bucket], |row| {
-            let file = File {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                bucket: row.get(2)?,
-                size: row.get(3)?,
-                blake3_hash: row.get(4)?,
-            };
-            Ok(file)
-        })
+        stmt.query_row([bucket], Sqlite::to_file)
     }
 
     fn get_file_data(&self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err> {
@@ -214,15 +196,7 @@ impl Storage for Sqlite {
         let mut stmt = self.conn.prepare("SELECT file.id, file.path, file.bucket, blob.size, file.blake3_hash \
                                                        FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
                                                        WHERE id = ?1")?;
-        let result: File = stmt.query_row([id], |r| {
-            Ok(File {
-                id: r.get(0)?,
-                path: r.get(1)?,
-                bucket: r.get(2)?,
-                size: r.get(3)?,
-                blake3_hash: r.get(4)?,
-            })
-        })?;
+        let result: File = stmt.query_row([id], Sqlite::to_file)?;
         stmt.finalize()?;
 
         Ok(result)
@@ -235,15 +209,7 @@ impl Storage for Sqlite {
         let mut stmt = self.conn.prepare("SELECT file.id, file.path, file.bucket, blob.size, file.blake3_hash \
                                                        FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
                                                        WHERE bucket = ?1 AND path = ?2")?;
-        let result: File = stmt.query_row([bucket, path], |r| {
-            Ok(File {
-                id: r.get(0)?,
-                path: r.get(1)?,
-                bucket: r.get(2)?,
-                size: r.get(3)?,
-                blake3_hash: r.get(4)?,
-            })
-        })?;
+        let result: File = stmt.query_row([bucket, path], Sqlite::to_file)?;
         stmt.finalize()?;
 
         Ok(result)
@@ -302,6 +268,17 @@ impl Sqlite {
         let result = stmt.execute(params![])?;
         stmt.finalize()?;
         Ok(result)
+    }
+
+    fn to_file(row: &Row<'_>) -> Result<File, Error> {
+        let file = File {
+            id: row.get(0)?,
+            path: row.get(1)?,
+            bucket: row.get(2)?,
+            size: row.get(3)?,
+            blake3_hash: row.get(4)?,
+        };
+        Ok(file)
     }
 
     /// Ignores `ErrorCode::DatabaseBusy` and retry query if so
