@@ -9,6 +9,7 @@ use crate::domain::Storage;
 
 const CACHE_SIZE: &str = "16384";
 
+#[derive(Copy, Clone)]
 pub enum Mode {
     ReadWrite,
     ReadOnly,
