@@ -29,7 +29,7 @@ use tokio_util::io::ReaderStream;
 use tokio_util::io::StreamReader;
 use urlencoding::encode;
 use uuid::Uuid;
-use zip::write::FileOptions;
+use zip::write::SimpleFileOptions;
 
 const BSTORE_TEST_ROOT: &str = "bstore_test";
 const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
@@ -102,7 +102,8 @@ where
     T: Write + Seek,
 {
     let mut zip = zip::ZipWriter::new(writer);
-    let options = FileOptions::default().unix_permissions(0o755);
+
+    let options = SimpleFileOptions::default().unix_permissions(0o755);
 
     let mut buffer = Vec::new();
 
