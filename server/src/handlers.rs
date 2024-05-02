@@ -141,10 +141,7 @@ pub async fn insert_zipped_bucket(
                         for i in 0..archive.len() {
                             match archive.by_index(i) {
                                 Ok(mut zip_file) => {
-                                    let outpath = match zip_file.enclosed_name() {
-                                        Some(path) => path.to_owned(),
-                                        None => continue,
-                                    };
+                                    let outpath = zip_file.mangled_name();
                                     let Some(outpath) = outpath.to_str() else {
                                         continue;
                                     };
