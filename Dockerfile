@@ -2,7 +2,7 @@
 
 # Build service
 FROM rust:latest as rust-build
-RUN apt update && apt -y install lld musl-tools
+RUN apt update && apt -y install lld musl-tools cmake
 COPY .cargo/ ./.cargo/
 COPY bstore/ ./bstore/
 COPY client/ ./client/
