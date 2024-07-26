@@ -15,13 +15,18 @@ pub struct FileParams {
     pub uri: String,
     pub file: String,
     pub bucket: String,
+    pub new_file_name: Option<String>,
 }
 
 pub async fn insert_file(params: FileParams) {
     let path = PathBuf::from(&params.file);
-    let file_name = path.file_name().unwrap().to_os_string();
-    let file_name = file_name.to_str().unwrap();
-    let file_url = url_escape::encode_component(file_name);
+    let file_name = if let Some(new_file_name) = params.new_file_name {
+        new_file_name
+    } else {
+        let file_name = path.file_name().unwrap().to_os_string();
+        file_name.to_str().unwrap().to_string()
+    };
+    let file_url = url_escape::encode_component(&file_name);
 
     let mut resource = Resource::new(&params.uri).unwrap();
     resource

@@ -27,6 +27,11 @@ async fn main() {
                             arg!(-b --bucket <BUCKET>)
                                 .required(true)
                                 .help("Bucket to insert the file"),
+                        )
+                        .arg(
+                            arg!(-n --name <NEW_FILE_NAME>)
+                                .required(false)
+                                .help("New file name if name should be different then name of downloadable file"),
                         ),
                 ),
         )
@@ -51,10 +56,12 @@ async fn main() {
         if let Some(file_matches) = insert_matches.subcommand_matches(cli::FILE_SUBCOMMAND) {
             let file = file_matches.get_one::<String>("file").unwrap();
             let bucket = file_matches.get_one::<String>("bucket").unwrap();
+            let new_file_name = file_matches.get_one::<String>("name");
             let params = FileParams {
                 uri: uri.clone(),
                 file: file.clone(),
                 bucket: bucket.clone(),
+                new_file_name: new_file_name.cloned(),
             };
             insert_single_file(params).await;
         }
