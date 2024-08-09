@@ -14,7 +14,7 @@ tokio = { workspace = true, features = ["full"] }
 futures-util = "0.3"
 blake3 = "1.5"
 serde = { workspace = true, features = ["derive"] }
-zip = "2.1.5"
+zip = "2.1.6"
 axum = { version = "0.7.5", features = ["multipart"] }
 tokio-util = { workspace = true, features = ["full"] }
 futures = { workspace = true }
@@ -29,7 +29,7 @@ hyper = { version = "1.4.1", features = [] }
 hyper-util = { workspace = true, features = ["tokio", "server-auto", "http1"] }
 
 [dev-dependencies]
-rstest = "0.21.0"
+rstest = "0.22.0"
 reqwest = { workspace = true, features = ["json", "multipart", "stream"] }
 serde_json = { workspace = true }
 test-context = "0.3.0"
