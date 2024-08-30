@@ -14,7 +14,7 @@ tokio = { workspace = true, features = ["full"] }
 futures-util = "0.3"
 blake3 = "1.5"
 serde = { workspace = true, features = ["derive"] }
-zip = "2.1.6"
+zip = "2.2.0"
 axum = { version = "0.7.5", features = ["multipart"] }
 tokio-util = { workspace = true, features = ["full"] }
 futures = { workspace = true }
