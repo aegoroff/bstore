@@ -15,7 +15,7 @@ futures-util = "0.3"
 blake3 = "1.5"
 serde = { workspace = true, features = ["derive"] }
 zip = "2.2.0"
-axum = { version = "0.7.6", features = ["multipart"] }
+axum = { version = "0.7.7", features = ["multipart"] }
 tokio-util = { workspace = true, features = ["full"] }
 futures = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -29,7 +29,7 @@ hyper = { version = "1.4.1", features = [] }
 hyper-util = { workspace = true, features = ["tokio", "server-auto", "http1"] }
 
 [dev-dependencies]
-rstest = "0.22.0"
+rstest = "0.23.0"
 reqwest = { workspace = true, features = ["json", "multipart", "stream"] }
 serde_json = { workspace = true }
 test-context = "0.3.0"
