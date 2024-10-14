@@ -5,7 +5,7 @@ use axum::{
 };
 use kernel::File;
 use utoipa::{
-    openapi::{self, content, ObjectBuilder, RefOr, ResponseBuilder, SchemaType},
+    openapi::{self, content, schema::SchemaType, ObjectBuilder, RefOr, ResponseBuilder},
     ToResponse,
 };
 
@@ -55,12 +55,12 @@ impl ToResponse<'static> for FileReply {
     fn response() -> (&'static str, RefOr<openapi::Response>) {
         let object_builder = ObjectBuilder::new();
         let object = object_builder
-            .schema_type(SchemaType::String)
+            .schema_type(SchemaType::Type(openapi::Type::String))
             .format(Some(openapi::SchemaFormat::KnownFormat(
                 openapi::KnownFormat::Binary,
             )))
             .build();
-        let content = content::Content::new(object);
+        let content = content::Content::new(Some(object));
         (
             "FileReply",
             ResponseBuilder::new()

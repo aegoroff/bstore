@@ -8,7 +8,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::{Stream, TryStreamExt};
 use futures_util::StreamExt;
-use kernel::DeleteResult;
+use kernel::{Bucket, DeleteResult, File};
 use std::fmt::Display;
 use std::io::{self, Cursor};
 use std::path::PathBuf;
