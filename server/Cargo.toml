@@ -15,17 +15,17 @@ futures-util = "0.3"
 blake3 = "1.5"
 serde = { workspace = true, features = ["derive"] }
 zip = "2.2.0"
-axum = { version = "0.7.8", features = ["multipart"] }
+axum = { version = "0.7.9", features = ["multipart"] }
 tokio-util = { workspace = true, features = ["full"] }
 futures = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing = "0.1"
 tower = { version = "0.5.1", features = ["util", "timeout"] }
-tower-http = { version = "0.6.1", features = ["add-extension", "limit", "trace"] }
+tower-http = { version = "0.6.2", features = ["add-extension", "limit", "trace"] }
 utoipa = { workspace = true, features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "8.0.3", features = ["axum"] }
 rusqlite = { version = "0.32", features = ["bundled", "chrono", "blob"] }
-hyper = { version = "1.5.0", features = [] }
+hyper = { version = "1.5.1", features = [] }
 hyper-util = { workspace = true, features = ["tokio", "server-auto", "http1"] }
 
 [dev-dependencies]
