@@ -14,7 +14,7 @@ tokio = { workspace = true, features = ["full"] }
 futures-util = "0.3"
 blake3 = "1.5"
 zip = "2.2.2"
-axum = { version = "0.7.9", features = ["multipart"] }
+axum = { version = "0.8.1", features = ["multipart"] }
 tokio-util = { workspace = true, features = ["full"] }
 futures = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -22,11 +22,11 @@ tracing = "0.1"
 tower = { version = "0.5.2", features = ["util", "timeout"] }
 tower-http = { version = "0.6.2", features = ["add-extension", "limit", "trace"] }
 utoipa = { workspace = true, features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "8.1.0", features = ["axum"] }
+utoipa-swagger-ui = { version = "8.1.1", features = ["axum"] }
 rusqlite = { version = "0.32", features = ["bundled", "chrono", "blob"] }
 
 [dev-dependencies]
-rstest = "0.23.0"
+rstest = "0.24.0"
 reqwest = { workspace = true, features = ["json", "multipart", "stream"] }
 test-context = "0.3.0"
 uuid = { version = "1.11.0", features = [

@@ -108,27 +108,27 @@ struct ApiDoc;
 pub fn create_routes(db: PathBuf) -> Router {
     let file_api = Router::new()
         .route(
-            "/:id",
+            "/{id}",
             delete(handlers::delete_file).get(handlers::get_file_content),
         )
-        .route("/:id/meta", get(handlers::get_file_info));
+        .route("/{id}/meta", get(handlers::get_file_info));
 
     let api = Router::new()
         .route("/", get(handlers::get_buckets))
         .route(
-            "/:bucket",
+            "/{bucket}",
             post(handlers::insert_many_from_form)
                 .delete(handlers::delete_bucket)
                 .get(handlers::get_files),
         )
-        .route("/:bucket/last", get(handlers::get_last_file))
+        .route("/{bucket}/last", get(handlers::get_last_file))
         .route(
-            "/:bucket/:file_name",
+            "/{bucket}/{file_name}",
             post(handlers::insert_file)
                 .get(handlers::search_and_get_file_content)
                 .delete(handlers::search_and_delete_file),
         )
-        .route("/:bucket/zip", post(handlers::insert_zipped_bucket))
+        .route("/{bucket}/zip", post(handlers::insert_zipped_bucket))
         .nest("/file/", file_api);
 
     Router::new()
