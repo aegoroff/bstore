@@ -71,9 +71,7 @@ fn visit_dirs(dir: &Path, cb: &mut dyn FnMut(&DirEntry)) -> io::Result<()> {
     Ok(())
 }
 
-async fn wrap_directory_into_multipart_form<'a>(
-    root: &Path,
-) -> io::Result<reqwest::multipart::Form> {
+async fn wrap_directory_into_multipart_form(root: &Path) -> io::Result<reqwest::multipart::Form> {
     let mut files: Vec<PathBuf> = Vec::new();
     let mut handler = |entry: &DirEntry| {
         files.push(entry.path());
