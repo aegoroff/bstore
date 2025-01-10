@@ -29,7 +29,7 @@ rusqlite = { version = "0.32", features = ["bundled", "chrono", "blob"] }
 rstest = "0.24.0"
 reqwest = { workspace = true, features = ["json", "multipart", "stream"] }
 test-context = "0.3.0"
-uuid = { version = "1.11.0", features = [
+uuid = { version = "1.11.1", features = [
     "v4",                # Lets you generate random UUIDs
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
     "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
