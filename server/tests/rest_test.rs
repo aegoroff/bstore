@@ -126,7 +126,7 @@ where
 
 async fn get_available_port() -> Option<u16> {
     loop {
-        let port = rand::thread_rng().gen_range(8000..9000);
+        let port = rand::rng().random_range(8000..9000);
         if port_is_available(port).await {
             return Some(port);
         }
@@ -173,7 +173,7 @@ impl AsyncTestContext for BstoreAsyncContext {
 
         let db_file: String = (10..DB_LEN)
             .map(|_| {
-                let idx = rand::thread_rng().gen_range(0..CHARSET.len());
+                let idx = rand::rng().random_range(0..CHARSET.len());
                 CHARSET[idx] as char
             })
             .collect();

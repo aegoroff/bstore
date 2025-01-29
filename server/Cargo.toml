@@ -28,13 +28,13 @@ rusqlite = { version = "0.33", features = ["bundled", "chrono", "blob"] }
 [dev-dependencies]
 rstest = "0.24.0"
 reqwest = { workspace = true, features = ["json", "multipart", "stream"] }
-test-context = "0.3.0"
+test-context = "0.4.1"
 uuid = { version = "1.12.1", features = [
     "v4",                # Lets you generate random UUIDs
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
     "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
 ]}
-rand = "0.8.5"
+rand = "0.9.0"
 url-escape = "0.1.1"
 serial_test = "3.2.0"
 urlencoding = "2.1.3"
