@@ -99,8 +99,16 @@ mod tests {
     #[case("http://localhost/x/", "/y", "http://localhost/x/y")]
     #[case("http://localhost/x/", "y/", "http://localhost/x/y/")]
     #[case("http://localhost/x/", "/y/", "http://localhost/x/y/")]
-    #[case::real_slashed_base("https://github.com/aegoroff/dirstat/releases/download/v1.0.7/", "dirstat_1.0.7_darwin_amd64.tar.gz", "https://github.com/aegoroff/dirstat/releases/download/v1.0.7/dirstat_1.0.7_darwin_amd64.tar.gz")]
-    #[case::real_slashless_base("https://github.com/aegoroff/dirstat/releases/download/v1.0.7", "dirstat_1.0.7_darwin_amd64.tar.gz", "https://github.com/aegoroff/dirstat/releases/download/v1.0.7/dirstat_1.0.7_darwin_amd64.tar.gz")]
+    #[case::real_slashed_base(
+        "https://github.com/aegoroff/dirstat/releases/download/v1.0.7/",
+        "dirstat_1.0.7_darwin_amd64.tar.gz",
+        "https://github.com/aegoroff/dirstat/releases/download/v1.0.7/dirstat_1.0.7_darwin_amd64.tar.gz"
+    )]
+    #[case::real_slashless_base(
+        "https://github.com/aegoroff/dirstat/releases/download/v1.0.7",
+        "dirstat_1.0.7_darwin_amd64.tar.gz",
+        "https://github.com/aegoroff/dirstat/releases/download/v1.0.7/dirstat_1.0.7_darwin_amd64.tar.gz"
+    )]
     #[case("http://localhost", "http://:/", "http://localhost/http:/:/")]
     #[trace]
     fn append_path_tests(#[case] base: &str, #[case] path: &str, #[case] expected: &str) {

@@ -1,9 +1,9 @@
 #![allow(clippy::assertions_on_constants)]
 
+use futures::TryStreamExt;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Sender;
 use futures::future::join_all;
-use futures::TryStreamExt;
 use kernel::Bucket;
 use kernel::DeleteResult;
 use kernel::File as FileItem;
@@ -21,7 +21,7 @@ use std::io::Seek;
 use std::io::Write;
 use std::path::Path;
 use std::{env, path::PathBuf};
-use test_context::{test_context, AsyncTestContext};
+use test_context::{AsyncTestContext, test_context};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio::{fs::File, io::AsyncWriteExt, io::BufWriter};

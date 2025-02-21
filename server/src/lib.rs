@@ -7,10 +7,10 @@
 use std::{path::PathBuf, sync::Arc};
 
 use axum::{
+    Router,
     extract::DefaultBodyLimit,
     routing::post,
     routing::{delete, get},
-    Router,
 };
 use std::time::Duration;
 use tokio::signal;

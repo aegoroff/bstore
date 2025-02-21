@@ -5,8 +5,8 @@ use axum::{
 };
 use kernel::File;
 use utoipa::{
-    openapi::{self, content, schema::SchemaType, ObjectBuilder, RefOr, ResponseBuilder},
     ToResponse,
+    openapi::{self, ObjectBuilder, RefOr, ResponseBuilder, content, schema::SchemaType},
 };
 
 pub struct FileReply {

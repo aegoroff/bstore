@@ -2,7 +2,7 @@
 #![allow(clippy::missing_panics_doc)]
 use std::path::PathBuf;
 
-use comfy_table::{presets::UTF8_HORIZONTAL_ONLY, Attribute, Cell, ContentArrangement, Table};
+use comfy_table::{Attribute, Cell, ContentArrangement, Table, presets::UTF8_HORIZONTAL_ONLY};
 use kernel::Bucket;
 use reqwest::Client;
 use resource::Resource;

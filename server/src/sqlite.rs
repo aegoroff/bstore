@@ -3,7 +3,7 @@ use std::path::Path;
 
 use kernel::{Bucket, DeleteResult, File};
 use rusqlite::blob::ZeroBlob;
-use rusqlite::{params, Connection, DatabaseName, Error, ErrorCode, OpenFlags, Row, Transaction};
+use rusqlite::{Connection, DatabaseName, Error, ErrorCode, OpenFlags, Row, Transaction, params};
 
 use crate::domain::Storage;
 

@@ -1,4 +1,4 @@
-use clap::{arg, command, crate_name, Command};
+use clap::{Command, arg, command, crate_name};
 use cli::client::{insert_single_file, list_buckets};
 use client::FileParams;
 
