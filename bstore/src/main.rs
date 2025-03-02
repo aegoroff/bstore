@@ -7,9 +7,8 @@ mod cli;
 #[tokio::main]
 async fn main() {
     let cli = command!(crate_name!())
-        .version(clap::crate_version!())
         .about(clap::crate_description!())
-        .subcommand(Command::new(cli::VERSION_SUBCOMMAND).about(cli::VERSION_DESCRIPTION))
+        .subcommand(Command::new(cli::BUGREPORT_SUBCOMMAND).about(cli::BUGREPORT_DESCRIPTION))
         .subcommand(Command::new(cli::SERVER_SUBCOMMAND).about(cli::SERVER_DESCRIPTION))
         .subcommand(
             Command::new(cli::INSERT_SUBCOMMAND)
@@ -47,8 +46,8 @@ async fn main() {
         .disable_version_flag(true)
         .get_matches();
 
-    if cli.subcommand_matches(cli::VERSION_SUBCOMMAND).is_some() {
-        cli::version::run();
+    if cli.subcommand_matches(cli::BUGREPORT_SUBCOMMAND).is_some() {
+        cli::bugreport::run();
     } else if let Some(server_matches) = cli.subcommand_matches(cli::SERVER_SUBCOMMAND) {
         cli::server::run(server_matches).await;
     } else if let Some(insert_matches) = cli.subcommand_matches(cli::INSERT_SUBCOMMAND) {

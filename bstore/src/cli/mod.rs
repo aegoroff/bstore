@@ -1,12 +1,12 @@
 pub mod client;
 pub mod server;
-pub mod version;
+pub mod bugreport;
 
 pub const SERVER_SUBCOMMAND: &str = "server";
 pub const SERVER_DESCRIPTION: &str = "Run the server";
 
-pub const VERSION_SUBCOMMAND: &str = "version";
-pub const VERSION_DESCRIPTION: &str = "Display the version and build information";
+pub const BUGREPORT_SUBCOMMAND: &str = "bugreport";
+pub const BUGREPORT_DESCRIPTION: &str = "Collect information about the system and the environment that users can send along with a bug report";
 
 pub const INSERT_SUBCOMMAND: &str = "insert";
 pub const INSERT_DESCRIPTION: &str = "Bstore insert file(s) into store";
