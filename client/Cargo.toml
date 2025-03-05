@@ -16,7 +16,7 @@ url-escape = "0.1.1"
 comfy-table = "7.1.4"
 
 [dev-dependencies]
-rstest = "0.24.0"
+rstest = "0.25.0"
 
 [lints]
 workspace = true
