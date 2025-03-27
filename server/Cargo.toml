@@ -12,8 +12,8 @@ description = "Small microservice that implementes blob storage with SQLite back
 kernel = { path = "../kernel" }
 tokio = { workspace = true, features = ["full"] }
 futures-util = "0.3"
-blake3 = "1.6"
-zip = "2.2.3"
+blake3 = "1.7"
+zip = "=2.4.2"
 axum = { version = "0.8.1", features = ["multipart"] }
 tokio-util = { workspace = true, features = ["full"] }
 futures = { workspace = true }
@@ -29,7 +29,7 @@ rusqlite = { version = "0.34", features = ["bundled", "chrono", "blob"] }
 rstest = "0.25.0"
 reqwest = { workspace = true, features = ["json", "multipart", "stream"] }
 test-context = "0.4.1"
-uuid = { version = "1.15.1", features = [
+uuid = { version = "1.16.0", features = [
     "v4",                # Lets you generate random UUIDs
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
     "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
