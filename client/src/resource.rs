@@ -54,7 +54,7 @@ impl fmt::Display for Resource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::rstest;
+    use test_case::test_case;
 
     #[test]
     fn new_correct_some() {
@@ -78,40 +78,38 @@ mod tests {
         assert!(r.is_none());
     }
 
-    #[rstest]
-    #[case("http://localhost", "x", "http://localhost/x")]
-    #[case("http://localhost", "/x", "http://localhost/x")]
-    #[case("http://localhost", "/x/", "http://localhost/x/")]
-    #[case("http://localhost", "x/", "http://localhost/x/")]
-    #[case("http://localhost", "/x/y/", "http://localhost/x/y/")]
-    #[case("http://localhost/", "x", "http://localhost/x")]
-    #[case("http://localhost/", "/x", "http://localhost/x")]
-    #[case("http://localhost/", "/x/", "http://localhost/x/")]
-    #[case("http://localhost/", "x/", "http://localhost/x/")]
-    #[case("http://localhost/", "x/y", "http://localhost/x/y")]
-    #[case("http://localhost/", "/x/y", "http://localhost/x/y")]
-    #[case("http://localhost/", "/x/y/", "http://localhost/x/y/")]
-    #[case("http://localhost/x", "/y", "http://localhost/x/y")]
-    #[case("http://localhost/x", "y", "http://localhost/x/y")]
-    #[case("http://localhost/x", "y/", "http://localhost/x/y/")]
-    #[case("http://localhost/x", "/y/", "http://localhost/x/y/")]
-    #[case("http://localhost/x/", "y", "http://localhost/x/y")]
-    #[case("http://localhost/x/", "/y", "http://localhost/x/y")]
-    #[case("http://localhost/x/", "y/", "http://localhost/x/y/")]
-    #[case("http://localhost/x/", "/y/", "http://localhost/x/y/")]
-    #[case::real_slashed_base(
+    #[test_case("http://localhost", "x", "http://localhost/x" ; "1")]
+    #[test_case("http://localhost", "/x", "http://localhost/x" ; "2")]
+    #[test_case("http://localhost", "/x/", "http://localhost/x/" ; "3")]
+    #[test_case("http://localhost", "x/", "http://localhost/x/" ; "4")]
+    #[test_case("http://localhost", "/x/y/", "http://localhost/x/y/" ; "5")]
+    #[test_case("http://localhost/", "x", "http://localhost/x" ; "6")]
+    #[test_case("http://localhost/", "/x", "http://localhost/x" ; "7")]
+    #[test_case("http://localhost/", "/x/", "http://localhost/x/" ; "8")]
+    #[test_case("http://localhost/", "x/", "http://localhost/x/" ; "9")]
+    #[test_case("http://localhost/", "x/y", "http://localhost/x/y" ; "10")]
+    #[test_case("http://localhost/", "/x/y", "http://localhost/x/y" ; "11")]
+    #[test_case("http://localhost/", "/x/y/", "http://localhost/x/y/" ; "12")]
+    #[test_case("http://localhost/x", "/y", "http://localhost/x/y" ; "13")]
+    #[test_case("http://localhost/x", "y", "http://localhost/x/y" ; "14")]
+    #[test_case("http://localhost/x", "y/", "http://localhost/x/y/" ; "15")]
+    #[test_case("http://localhost/x", "/y/", "http://localhost/x/y/" ; "16")]
+    #[test_case("http://localhost/x/", "y", "http://localhost/x/y" ; "17")]
+    #[test_case("http://localhost/x/", "/y", "http://localhost/x/y" ; "18")]
+    #[test_case("http://localhost/x/", "y/", "http://localhost/x/y/" ; "19")]
+    #[test_case("http://localhost/x/", "/y/", "http://localhost/x/y/" ; "20")]
+    #[test_case(
         "https://github.com/aegoroff/dirstat/releases/download/v1.0.7/",
         "dirstat_1.0.7_darwin_amd64.tar.gz",
-        "https://github.com/aegoroff/dirstat/releases/download/v1.0.7/dirstat_1.0.7_darwin_amd64.tar.gz"
+        "https://github.com/aegoroff/dirstat/releases/download/v1.0.7/dirstat_1.0.7_darwin_amd64.tar.gz" ; "real_slashed_base"
     )]
-    #[case::real_slashless_base(
+    #[test_case(
         "https://github.com/aegoroff/dirstat/releases/download/v1.0.7",
         "dirstat_1.0.7_darwin_amd64.tar.gz",
-        "https://github.com/aegoroff/dirstat/releases/download/v1.0.7/dirstat_1.0.7_darwin_amd64.tar.gz"
+        "https://github.com/aegoroff/dirstat/releases/download/v1.0.7/dirstat_1.0.7_darwin_amd64.tar.gz" ; "real_slashless_base"
     )]
-    #[case("http://localhost", "http://:/", "http://localhost/http:/:/")]
-    #[trace]
-    fn append_path_tests(#[case] base: &str, #[case] path: &str, #[case] expected: &str) {
+    #[test_case("http://localhost", "http://:/", "http://localhost/http:/:/" ; "21")]
+    fn append_path_tests(base: &str, path: &str, expected: &str) {
         // Arrange
         let mut r = Resource::new(base).unwrap();
 

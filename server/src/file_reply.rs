@@ -75,17 +75,15 @@ impl ToResponse<'static> for FileReply {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::rstest;
+    use test_case::test_case;
 
-    #[rstest]
-    #[case("", "")]
-    #[case("file.ext", "file.ext")]
-    #[case("dir/file.ext", "file.ext")]
-    #[case("dir\\file.ext", "file.ext")]
-    #[case("dir1\\dir2\\file.ext", "file.ext")]
-    #[case("dir1/dir2/file.ext", "file.ext")]
-    #[trace]
-    fn name_from_path(#[case] path: &str, #[case] expected: &str) {
+    #[test_case("", "" ; "empty")]
+    #[test_case("file.ext", "file.ext" ; "file")]
+    #[test_case("dir/file.ext", "file.ext" ; "file in dir")]
+    #[test_case("dir\\file.ext", "file.ext" ; "file in dir backslashed")]
+    #[test_case("dir1\\dir2\\file.ext", "file.ext" ; "file in two dirs backslashed")]
+    #[test_case("dir1/dir2/file.ext", "file.ext" ; "file in two dirs")]
+    fn name_from_path(path: &str, expected: &str) {
         // Arrange
         let file = File {
             id: 1,
