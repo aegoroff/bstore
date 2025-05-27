@@ -3,7 +3,7 @@ use std::path::Path;
 
 use kernel::{Bucket, DeleteResult, File};
 use rusqlite::blob::ZeroBlob;
-use rusqlite::{Connection, DatabaseName, Error, ErrorCode, OpenFlags, Row, Transaction, params};
+use rusqlite::{Connection, Error, ErrorCode, MAIN_DB, OpenFlags, Row, Transaction, params};
 
 use crate::domain::Storage;
 
@@ -83,7 +83,7 @@ impl Storage for Sqlite {
 
                 let rowid = tx.last_insert_rowid();
 
-                let mut blob = tx.blob_open(DatabaseName::Main, "blob", "data", rowid, false)?;
+                let mut blob = tx.blob_open(MAIN_DB, "blob", "data", rowid, false)?;
                 if let Err(e) = blob.write_all(&data) {
                     tracing::error!("{e}");
                 }
@@ -184,9 +184,7 @@ impl Storage for Sqlite {
         let rowid: i64 = stmt.query_row([id], |r| r.get(0))?;
         stmt.finalize()?;
 
-        let b = self
-            .conn
-            .blob_open(DatabaseName::Main, "blob", "data", rowid, true)?;
+        let b = self.conn.blob_open(MAIN_DB, "blob", "data", rowid, true)?;
         Ok(Box::new(b))
     }
 
