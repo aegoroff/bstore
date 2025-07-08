@@ -13,23 +13,23 @@ kernel = { path = "../kernel" }
 tokio = { workspace = true, features = ["full"] }
 futures-util = "0.3"
 blake3 = "1.8"
-zip = "=2.6.1"
-axum = { version = "0.8.3", features = ["multipart"] }
+zip = "=4.2.0"
+axum = { version = "0.8.4", features = ["multipart"] }
 tokio-util = { workspace = true, features = ["full"] }
 futures = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing = "0.1"
 tower = { version = "0.5.2", features = ["util", "timeout"] }
-tower-http = { version = "0.6.2", features = ["add-extension", "limit", "trace"] }
+tower-http = { version = "0.6.6", features = ["add-extension", "limit", "trace"] }
 utoipa = { workspace = true, features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "9.0.1", features = ["axum"] }
-rusqlite = { version = "0.35", features = ["bundled", "chrono", "blob"] }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
+rusqlite = { version = "0.37", features = ["bundled", "chrono", "blob"] }
 
 [dev-dependencies]
 test-case = "3.3.1"
 reqwest = { workspace = true, features = ["json", "multipart", "stream"] }
 test-context = "0.4.1"
-uuid = { version = "1.16.0", features = [
+uuid = { version = "1.17.0", features = [
     "v4",                # Lets you generate random UUIDs
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
     "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
