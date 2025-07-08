@@ -581,7 +581,7 @@ async fn get_file_content(ctx: &mut BstoreAsyncContext) {
     let result = client.get(file_uri).send().await.unwrap().bytes_stream();
 
     // Assert
-    let body_with_io_error = result.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
+    let body_with_io_error = result.map_err(io::Error::other);
     let body_reader = StreamReader::new(body_with_io_error);
     futures::pin_mut!(body_reader);
     let mut buffer = Vec::new();
@@ -672,7 +672,7 @@ async fn search_file_content(ctx: &mut BstoreAsyncContext) {
     let result = client.get(file_uri).send().await.unwrap().bytes_stream();
 
     // Assert
-    let body_with_io_error = result.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
+    let body_with_io_error = result.map_err(io::Error::other);
     let body_reader = StreamReader::new(body_with_io_error);
     futures::pin_mut!(body_reader);
     let mut buffer = Vec::new();
