@@ -12,7 +12,10 @@
     #"target-feature=+crt-static",
 #]
 
-[target.'cfg(target_os = "linux")']
+[target.x86_64-unknown-linux-musl]
+rustflags = ["-Clink-arg=-fuse-ld=lld", "-Ctarget-cpu=native"]
+
+[target.x86_64-unknown-linux-gnu]
 rustflags = ["-Clink-arg=-fuse-ld=lld", "-Ctarget-cpu=native"]
 
 [unstable]
