@@ -13,6 +13,7 @@ use std::fmt::Display;
 use std::io::{self, Cursor};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio_util::io::StreamReader;
 
 use axum::{
@@ -497,8 +498,14 @@ where
     F: FnOnce(Sqlite) -> Result<R, String>,
     R: IntoResponse,
 {
+    let start = Instant::now();
     match Sqlite::open(db.as_path(), mode) {
-        Ok(s) => action(s),
+        Ok(s) => {
+            let res = action(s);
+            let duration = start.elapsed();
+            tracing::info!("DB query time: {:?}", duration);
+            res
+        }
         Err(e) => {
             tracing::error!("{e}");
             Err(e.to_string())
