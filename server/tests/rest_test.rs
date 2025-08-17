@@ -207,7 +207,7 @@ impl AsyncTestContext for BstoreAsyncContext {
             .unwrap();
 
         let task = tokio::spawn(async move {
-            let app = server::create_routes(cloned_db);
+            let app = server::create_routes(cloned_db).unwrap();
             axum::serve(listener, app)
                 .with_graceful_shutdown(async { recv.await.unwrap() })
                 .await

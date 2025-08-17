@@ -12,6 +12,8 @@ use axum::{
     routing::post,
     routing::{delete, get},
 };
+use futures::lock::Mutex;
+use rusqlite::Error;
 use std::time::Duration;
 use tokio::signal;
 use tower::ServiceBuilder;
@@ -65,7 +67,8 @@ pub async fn run() {
     let listen_socket = SocketAddr::from(([0, 0, 0, 0], port.parse().unwrap_or_default()));
     tracing::info!("listening on {listen_socket}");
 
-    let app = create_routes(db);
+    // TODO: handle this
+    let app = create_routes(db).unwrap();
 
     if let Ok(listener) = tokio::net::TcpListener::bind(listen_socket).await {
         if let Err(e) = axum::serve(listener, app)
@@ -105,7 +108,7 @@ pub async fn run() {
     )]
 struct ApiDoc;
 
-pub fn create_routes(db: PathBuf) -> Router {
+pub fn create_routes(db: PathBuf) -> Result<Router, Error> {
     let file_api = Router::new()
         .route(
             "/{id}",
@@ -131,7 +134,9 @@ pub fn create_routes(db: PathBuf) -> Router {
         .route("/{bucket}/zip", post(handlers::insert_zipped_bucket))
         .nest("/file/", file_api);
 
-    Router::new()
+    let storage = Sqlite::open(db.clone(), Mode::ReadWrite)?;
+    let storage = Arc::new(Mutex::new(storage));
+    Ok(Router::new()
         .merge(SwaggerUi::new("/swagger").url("/api-doc/openapi.json", ApiDoc::openapi()))
         .nest("/api/", api)
         .layer(
@@ -147,7 +152,7 @@ pub fn create_routes(db: PathBuf) -> Router {
                 ))
                 .into_inner(),
         )
-        .with_state(Arc::new(db))
+        .with_state(storage))
 }
 
 /// .

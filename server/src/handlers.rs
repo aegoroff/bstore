@@ -6,6 +6,7 @@ use axum::Json;
 use axum::body::{Body, Bytes};
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
+use futures::lock::Mutex;
 use futures::{Stream, TryStreamExt};
 use futures_util::StreamExt;
 use kernel::{Bucket, DeleteResult, File};
@@ -36,19 +37,20 @@ use axum::{
 )]
 pub async fn insert_many_from_form(
     Path(bucket): Path<String>,
-    State(db): State<Arc<PathBuf>>,
+    State(db): State<Arc<Mutex<Sqlite>>>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    let mut repository = match Sqlite::open(db.as_path(), Mode::ReadWrite) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("{e}");
-            return internal_server_error(&e);
-        }
-    };
+    // let mut repository = match Sqlite::open(db.as_path(), Mode::ReadWrite) {
+    //     Ok(s) => s,
+    //     Err(e) => {
+    //         tracing::error!("{e}");
+    //         return internal_server_error(&e);
+    //     }
+    // };
 
     tracing::info!("create bucket: {bucket}");
     let mut inserted: Vec<i64> = vec![];
+    let mut repository = db.lock().await;
     while let Ok(Some(field)) = multipart.next_field().await {
         let file_name = field.file_name().unwrap_or_default().to_string();
         match read_from_stream(field).await {
@@ -86,22 +88,21 @@ pub async fn insert_many_from_form(
 )]
 pub async fn insert_file(
     Path((bucket, file_name)): Path<(String, String)>,
-    State(db): State<Arc<PathBuf>>,
+    State(db): State<Arc<Mutex<Sqlite>>>,
     body: Body,
 ) -> Result<impl IntoResponse, String> {
     match read_from_stream(body.into_data_stream()).await {
         Ok((result, read_bytes)) => {
-            execute(&db, Mode::ReadWrite, move |mut repository| {
-                let mut inserted: Vec<i64> = vec![];
-                // Plain file branch
-                let insert_result = repository.insert_file(&file_name, &bucket, result);
-                if let Some(id) =
-                    log_file_operation_result(insert_result, &file_name, read_bytes as u64)
-                {
-                    inserted.push(id);
-                }
-                Ok(created(Json(inserted)))
-            })
+            let mut inserted: Vec<i64> = vec![];
+            // Plain file branch
+            let mut repository = db.lock().await;
+            let insert_result = repository.insert_file(&file_name, &bucket, result);
+            if let Some(id) =
+                log_file_operation_result(insert_result, &file_name, read_bytes as u64)
+            {
+                inserted.push(id);
+            }
+            Ok(created(Json(inserted)))
         }
         Err(e) => {
             tracing::error!("{e}");
@@ -125,61 +126,62 @@ pub async fn insert_file(
 )]
 pub async fn insert_zipped_bucket(
     Path(bucket): Path<String>,
-    State(db): State<Arc<PathBuf>>,
+    State(db): State<Arc<Mutex<Sqlite>>>,
     body: Body,
 ) -> Result<impl IntoResponse, String> {
     match read_from_stream(body.into_data_stream()).await {
         Ok((data, _)) => {
-            execute(&db, Mode::ReadWrite, move |mut repository| {
-                let mut inserted: Vec<i64> = vec![];
-                // Zip archive branch
-                let buff = Cursor::new(data);
+            //execute(&db, Mode::ReadWrite, move |mut repository| {
+            let mut repository = db.lock().await;
+            let mut inserted: Vec<i64> = vec![];
+            // Zip archive branch
+            let buff = Cursor::new(data);
 
-                let zip_result = zip::ZipArchive::new(buff);
+            let zip_result = zip::ZipArchive::new(buff);
 
-                match zip_result {
-                    Ok(mut archive) => {
-                        for i in 0..archive.len() {
-                            match archive.by_index(i) {
-                                Ok(mut zip_file) => {
-                                    let outpath = zip_file.mangled_name();
-                                    let Some(outpath) = outpath.to_str() else {
-                                        continue;
-                                    };
+            match zip_result {
+                Ok(mut archive) => {
+                    for i in 0..archive.len() {
+                        match archive.by_index(i) {
+                            Ok(mut zip_file) => {
+                                let outpath = zip_file.mangled_name();
+                                let Some(outpath) = outpath.to_str() else {
+                                    continue;
+                                };
 
-                                    let Ok(capacity) = usize::try_from(zip_file.size()) else {
-                                        continue;
-                                    };
-                                    let mut writer: Vec<u8> = Vec::with_capacity(capacity);
-                                    match std::io::copy(&mut zip_file, &mut writer) {
-                                        Ok(r) => {
-                                            let insert_result =
-                                                repository.insert_file(outpath, &bucket, writer);
-                                            if let Some(id) =
-                                                log_file_operation_result(insert_result, outpath, r)
-                                            {
-                                                inserted.push(id);
-                                            }
-                                        }
-                                        Err(e) => {
-                                            tracing::error!("Zip file copy error: {e}");
+                                let Ok(capacity) = usize::try_from(zip_file.size()) else {
+                                    continue;
+                                };
+                                let mut writer: Vec<u8> = Vec::with_capacity(capacity);
+                                match std::io::copy(&mut zip_file, &mut writer) {
+                                    Ok(r) => {
+                                        let insert_result =
+                                            repository.insert_file(outpath, &bucket, writer);
+                                        if let Some(id) =
+                                            log_file_operation_result(insert_result, outpath, r)
+                                        {
+                                            inserted.push(id);
                                         }
                                     }
+                                    Err(e) => {
+                                        tracing::error!("Zip file copy error: {e}");
+                                    }
                                 }
-                                Err(e) => {
-                                    tracing::error!("file not extracted. Error: {:#?}", e);
-                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("file not extracted. Error: {:#?}", e);
                             }
                         }
                     }
-                    Err(e) => {
-                        tracing::error!("{:#?}", e);
-                        return Ok(internal_server_error(&e));
-                    }
                 }
+                Err(e) => {
+                    tracing::error!("{:#?}", e);
+                    return Ok(internal_server_error(&e));
+                }
+            }
 
-                Ok(created(Json(inserted)))
-            })
+            Ok(created(Json(inserted)))
+            //})
         }
         Err(e) => {
             tracing::error!("{e}");
@@ -203,33 +205,34 @@ pub async fn insert_zipped_bucket(
 )]
 pub async fn delete_bucket(
     Path(bucket): Path<String>,
-    State(db): State<Arc<PathBuf>>,
+    State(db): State<Arc<Mutex<Sqlite>>>,
 ) -> Result<impl IntoResponse, String> {
-    execute(&db, Mode::ReadWrite, move |mut repository| {
-        let delete_result = repository.delete_bucket(&bucket);
-        let result = match delete_result {
-            Ok(deleted) => {
-                tracing::info!(
-                    "bucket: {} deleted. The number of files removed {} blobs removed {}",
-                    &bucket,
-                    deleted.files,
-                    deleted.blobs
-                );
-                deleted
-            }
-            Err(e) => {
-                tracing::error!("bucket '{}' not deleted. Error: {}", &bucket, e);
-                DeleteResult::default()
-            }
-        };
+    //execute(&db, Mode::ReadWrite, move |mut repository| {
+    let mut repository = db.lock().await;
+    let delete_result = repository.delete_bucket(&bucket);
+    let result = match delete_result {
+        Ok(deleted) => {
+            tracing::info!(
+                "bucket: {} deleted. The number of files removed {} blobs removed {}",
+                &bucket,
+                deleted.files,
+                deleted.blobs
+            );
+            deleted
+        }
+        Err(e) => {
+            tracing::error!("bucket '{}' not deleted. Error: {}", &bucket, e);
+            DeleteResult::default()
+        }
+    };
 
-        let status = if result.files == 0 {
-            StatusCode::NOT_FOUND
-        } else {
-            StatusCode::OK
-        };
-        Ok((status, Json(result)))
-    })
+    let status = if result.files == 0 {
+        StatusCode::NOT_FOUND
+    } else {
+        StatusCode::OK
+    };
+    Ok((status, Json(result)))
+    //})
 }
 
 /// Lists all buckets
@@ -241,11 +244,14 @@ pub async fn delete_bucket(
         (status = 200, description = "List all buckets successfully", body = [Bucket]),
     ),
 )]
-pub async fn get_buckets(State(db): State<Arc<PathBuf>>) -> Result<impl IntoResponse, String> {
-    execute(&db, Mode::ReadOnly, move |mut repository| {
-        let result = repository.get_buckets().unwrap_or_default();
-        Ok(Json(result))
-    })
+pub async fn get_buckets(
+    State(db): State<Arc<Mutex<Sqlite>>>,
+) -> Result<impl IntoResponse, String> {
+    //execute(&db, Mode::ReadOnly, move |mut repository| {
+    let mut repository = db.lock().await;
+    let result = repository.get_buckets().unwrap_or_default();
+    Ok(Json(result))
+    //})
 }
 
 /// Lists all files from a bucket
@@ -263,17 +269,18 @@ pub async fn get_buckets(State(db): State<Arc<PathBuf>>) -> Result<impl IntoResp
 )]
 pub async fn get_files(
     Path(bucket): Path<String>,
-    State(db): State<Arc<PathBuf>>,
+    State(db): State<Arc<Mutex<Sqlite>>>,
 ) -> Result<impl IntoResponse, String> {
-    execute(&db, Mode::ReadOnly, move |mut repository| {
-        let result = repository.get_files(&bucket).unwrap_or_default();
-        let status = if result.is_empty() {
-            StatusCode::NOT_FOUND
-        } else {
-            StatusCode::OK
-        };
-        Ok((status, Json(result)))
-    })
+    //execute(&db, Mode::ReadOnly, move |mut repository| {
+    let mut repository = db.lock().await;
+    let result = repository.get_files(&bucket).unwrap_or_default();
+    let status = if result.is_empty() {
+        StatusCode::NOT_FOUND
+    } else {
+        StatusCode::OK
+    };
+    Ok((status, Json(result)))
+    //})
 }
 
 /// Gets last inserted file info a bucket
@@ -291,14 +298,13 @@ pub async fn get_files(
 )]
 pub async fn get_last_file(
     Path(bucket): Path<String>,
-    State(db): State<Arc<PathBuf>>,
+    State(db): State<Arc<Mutex<Sqlite>>>,
 ) -> impl IntoResponse {
-    let result = execute(&db, Mode::ReadOnly, move |mut repository| match repository
-        .get_last_file(&bucket)
-    {
+    let mut repository = db.lock().await;
+    let result = match repository.get_last_file(&bucket) {
         Ok(file) => Ok(Json(file)),
         Err(e) => Err(e.to_string()),
-    });
+    };
     make_response(result)
 }
 
@@ -317,27 +323,26 @@ pub async fn get_last_file(
 )]
 pub async fn get_file_content(
     Path(id): Path<i64>,
-    State(db): State<Arc<PathBuf>>,
+    State(db): State<Arc<Mutex<Sqlite>>>,
 ) -> impl IntoResponse {
-    let result = execute(&db, Mode::ReadOnly, move |mut repository| {
-        let info = match repository.get_file_info(id) {
-            Ok(f) => f,
-            Err(e) => return Err(e.to_string()),
-        };
+    let mut repository = db.lock().await;
+    let info = match repository.get_file_info(id) {
+        Ok(f) => f,
+        Err(e) => return Err(e.to_string()),
+    };
 
-        let mut rdr = match repository.get_file_data(id) {
-            Ok(r) => r,
-            Err(e) => return Err(e.to_string()),
-        };
+    let mut rdr = match repository.get_file_data(id) {
+        Ok(r) => r,
+        Err(e) => return Err(e.to_string()),
+    };
 
-        // NOTE: Find way to pass raw Read to stream
-        let mut content = Vec::<u8>::with_capacity(info.size);
-        let size = rdr.read_to_end(&mut content).unwrap_or_default();
-        tracing::info!("File size {}", size);
+    // NOTE: Find way to pass raw Read to stream
+    let mut content = Vec::<u8>::with_capacity(info.size);
+    let size = rdr.read_to_end(&mut content).unwrap_or_default();
+    tracing::info!("File size {}", size);
 
-        Ok(FileReply::new(content, info))
-    });
-    make_response(result)
+    let result = Ok(FileReply::new(content, info));
+    Ok(make_response(result))
 }
 
 /// Gets file's information by file id
@@ -355,17 +360,15 @@ pub async fn get_file_content(
 )]
 pub async fn get_file_info(
     Path(id): Path<i64>,
-    State(db): State<Arc<PathBuf>>,
+    State(db): State<Arc<Mutex<Sqlite>>>,
 ) -> impl IntoResponse {
-    let result = execute(&db, Mode::ReadOnly, move |mut repository| {
-        let info = match repository.get_file_info(id) {
-            Ok(f) => f,
-            Err(e) => return Err(e.to_string()),
-        };
+    let mut repository = db.lock().await;
+    let info = match repository.get_file_info(id) {
+        Ok(f) => f,
+        Err(e) => return Err(e.to_string()),
+    };
 
-        Ok(Json(info))
-    });
-    make_response(result)
+    Ok(make_response(Ok(Json(info))))
 }
 
 /// Gets file binary content by bucket id and file path inside bucket
@@ -384,27 +387,25 @@ pub async fn get_file_info(
 )]
 pub async fn search_and_get_file_content(
     Path((bucket, file_name)): Path<(String, String)>,
-    State(db): State<Arc<PathBuf>>,
+    State(db): State<Arc<Mutex<Sqlite>>>,
 ) -> impl IntoResponse {
-    let result = execute(&db, Mode::ReadOnly, move |mut repository| {
-        let info = match repository.search_file_info(&bucket, &file_name) {
-            Ok(f) => f,
-            Err(e) => return Err(e.to_string()),
-        };
+    let mut repository = db.lock().await;
+    let info = match repository.search_file_info(&bucket, &file_name) {
+        Ok(f) => f,
+        Err(e) => return Err(e.to_string()),
+    };
 
-        let mut rdr = match repository.get_file_data(info.id) {
-            Ok(r) => r,
-            Err(e) => return Err(e.to_string()),
-        };
+    let mut rdr = match repository.get_file_data(info.id) {
+        Ok(r) => r,
+        Err(e) => return Err(e.to_string()),
+    };
 
-        // NOTE: Find way to pass raw Read to stream
-        let mut content = Vec::<u8>::with_capacity(info.size);
-        let size = rdr.read_to_end(&mut content).unwrap_or_default();
-        tracing::info!("File size {}", size);
+    // NOTE: Find way to pass raw Read to stream
+    let mut content = Vec::<u8>::with_capacity(info.size);
+    let size = rdr.read_to_end(&mut content).unwrap_or_default();
+    tracing::info!("File size {}", size);
 
-        Ok(FileReply::new(content, info))
-    });
-    make_response(result)
+    Ok(make_response(Ok(FileReply::new(content, info))))
 }
 
 macro_rules! delete_file {
@@ -450,11 +451,10 @@ macro_rules! delete_file {
 )]
 pub async fn delete_file(
     Path(id): Path<i64>,
-    State(db): State<Arc<PathBuf>>,
+    State(db): State<Arc<Mutex<Sqlite>>>,
 ) -> Result<impl IntoResponse, String> {
-    execute(&db, Mode::ReadWrite, move |mut repository| {
-        delete_file!(repository, id)
-    })
+    let mut repository = db.lock().await;
+    delete_file!(repository, id)
 }
 
 /// Deletes file by bucket id and file path inside bucket
@@ -473,14 +473,13 @@ pub async fn delete_file(
 )]
 pub async fn search_and_delete_file(
     Path((bucket, file_name)): Path<(String, String)>,
-    State(db): State<Arc<PathBuf>>,
+    State(db): State<Arc<Mutex<Sqlite>>>,
 ) -> Result<impl IntoResponse, String> {
-    execute(&db, Mode::ReadWrite, move |mut repository| match repository
-        .search_file_info(&bucket, &file_name)
-    {
+    let mut repository = db.lock().await;
+    match repository.search_file_info(&bucket, &file_name) {
         Ok(f) => delete_file!(repository, f.id),
         Err(_e) => Ok((StatusCode::NOT_FOUND, Json(DeleteResult::default()))),
-    })
+    }
 }
 
 fn make_response(result: Result<impl IntoResponse + Sized, String>) -> (StatusCode, Response) {
@@ -493,25 +492,25 @@ fn make_response(result: Result<impl IntoResponse + Sized, String>) -> (StatusCo
     }
 }
 
-fn execute<F, R>(db: &Arc<PathBuf>, mode: Mode, action: F) -> Result<R, String>
-where
-    F: FnOnce(Sqlite) -> Result<R, String>,
-    R: IntoResponse,
-{
-    let start = Instant::now();
-    match Sqlite::open(db.as_path(), mode) {
-        Ok(s) => {
-            let res = action(s);
-            let duration = start.elapsed();
-            tracing::info!("DB query time: {:?}", duration);
-            res
-        }
-        Err(e) => {
-            tracing::error!("{e}");
-            Err(e.to_string())
-        }
-    }
-}
+// fn execute<F, R>(db: &Arc<PathBuf>, mode: Mode, action: F) -> Result<R, String>
+// where
+//     F: FnOnce(Sqlite) -> Result<R, String>,
+//     R: IntoResponse,
+// {
+//     let start = Instant::now();
+//     match Sqlite::open(db.as_path(), mode) {
+//         Ok(s) => {
+//             let res = action(s);
+//             let duration = start.elapsed();
+//             tracing::info!("DB query time: {:?}", duration);
+//             res
+//         }
+//         Err(e) => {
+//             tracing::error!("{e}");
+//             Err(e.to_string())
+//         }
+//     }
+// }
 
 fn log_file_operation_result<E: Display>(
     operation_result: Result<i64, E>,
