@@ -1,7 +1,7 @@
 #![allow(clippy::unused_async)]
 use crate::domain::Storage;
 use crate::file_reply::FileReply;
-use crate::sqlite::{Mode, Sqlite};
+use crate::sqlite::Sqlite;
 use axum::Json;
 use axum::body::{Body, Bytes};
 use axum::extract::State;
@@ -12,9 +12,7 @@ use futures_util::StreamExt;
 use kernel::{Bucket, DeleteResult, File};
 use std::fmt::Display;
 use std::io::{self, Cursor};
-use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
 use tokio_util::io::StreamReader;
 
 use axum::{
@@ -328,12 +326,12 @@ pub async fn get_file_content(
     let mut repository = db.lock().await;
     let info = match repository.get_file_info(id) {
         Ok(f) => f,
-        Err(e) => return Err(e.to_string()),
+        Err(e) => return (StatusCode::NOT_FOUND, e.to_string().into_response()),
     };
 
     let mut rdr = match repository.get_file_data(id) {
         Ok(r) => r,
-        Err(e) => return Err(e.to_string()),
+        Err(e) => return (StatusCode::NOT_FOUND, e.to_string().into_response()),
     };
 
     // NOTE: Find way to pass raw Read to stream
@@ -342,7 +340,7 @@ pub async fn get_file_content(
     tracing::info!("File size {}", size);
 
     let result = Ok(FileReply::new(content, info));
-    Ok(make_response(result))
+    make_response(result)
 }
 
 /// Gets file's information by file id
@@ -392,12 +390,12 @@ pub async fn search_and_get_file_content(
     let mut repository = db.lock().await;
     let info = match repository.search_file_info(&bucket, &file_name) {
         Ok(f) => f,
-        Err(e) => return Err(e.to_string()),
+        Err(e) => return (StatusCode::NOT_FOUND, e.to_string().into_response()),
     };
 
     let mut rdr = match repository.get_file_data(info.id) {
         Ok(r) => r,
-        Err(e) => return Err(e.to_string()),
+        Err(e) => return (StatusCode::NOT_FOUND, e.to_string().into_response()),
     };
 
     // NOTE: Find way to pass raw Read to stream
@@ -405,7 +403,7 @@ pub async fn search_and_get_file_content(
     let size = rdr.read_to_end(&mut content).unwrap_or_default();
     tracing::info!("File size {}", size);
 
-    Ok(make_response(Ok(FileReply::new(content, info))))
+    make_response(Ok(FileReply::new(content, info)))
 }
 
 macro_rules! delete_file {
@@ -491,26 +489,6 @@ fn make_response(result: Result<impl IntoResponse + Sized, String>) -> (StatusCo
         }
     }
 }
-
-// fn execute<F, R>(db: &Arc<PathBuf>, mode: Mode, action: F) -> Result<R, String>
-// where
-//     F: FnOnce(Sqlite) -> Result<R, String>,
-//     R: IntoResponse,
-// {
-//     let start = Instant::now();
-//     match Sqlite::open(db.as_path(), mode) {
-//         Ok(s) => {
-//             let res = action(s);
-//             let duration = start.elapsed();
-//             tracing::info!("DB query time: {:?}", duration);
-//             res
-//         }
-//         Err(e) => {
-//             tracing::error!("{e}");
-//             Err(e.to_string())
-//         }
-//     }
-// }
 
 fn log_file_operation_result<E: Display>(
     operation_result: Result<i64, E>,
