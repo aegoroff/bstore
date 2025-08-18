@@ -67,18 +67,20 @@ pub async fn run() {
     let listen_socket = SocketAddr::from(([0, 0, 0, 0], port.parse().unwrap_or_default()));
     tracing::info!("listening on {listen_socket}");
 
-    // TODO: handle this
-    let app = create_routes(db).unwrap();
-
-    if let Ok(listener) = tokio::net::TcpListener::bind(listen_socket).await {
-        if let Err(e) = axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown_signal())
-            .await
-        {
-            tracing::error!("Sever run failed with: {e}");
+    match create_routes(db) {
+        Ok(app) => {
+            if let Ok(listener) = tokio::net::TcpListener::bind(listen_socket).await {
+                if let Err(e) = axum::serve(listener, app)
+                    .with_graceful_shutdown(shutdown_signal())
+                    .await
+                {
+                    tracing::error!("Sever run failed with: {e}");
+                }
+            } else {
+                tracing::error!("Failed to start server at 0.0.0.0:{port}");
+            }
         }
-    } else {
-        tracing::error!("Failed to start server at 0.0.0.0:{port}");
+        Err(err) => tracing::error!("Failed to start server. Error:{err:?}"),
     }
 }
 
