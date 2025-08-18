@@ -645,6 +645,7 @@ async fn get_unexist_file_content(ctx: &mut BstoreAsyncContext) {
 
     match status {
         Ok(_) => {
+            println!("{status:?}");
             unreachable!("Should be error but it wasn't");
         }
         Err(e) => {
@@ -705,6 +706,7 @@ async fn search_unexist_file_content(ctx: &mut BstoreAsyncContext) {
 
     match status {
         Ok(_) => {
+            println!("{status:?}");
             unreachable!("Should be error but it wasn't");
         }
         Err(e) => {
