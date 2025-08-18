@@ -207,7 +207,7 @@ impl AsyncTestContext for BstoreAsyncContext {
             .unwrap();
 
         let task = tokio::spawn(async move {
-            let app = server::create_routes(cloned_db);
+            let app = server::create_routes(cloned_db).unwrap();
             axum::serve(listener, app)
                 .with_graceful_shutdown(async { recv.await.unwrap() })
                 .await
@@ -645,6 +645,7 @@ async fn get_unexist_file_content(ctx: &mut BstoreAsyncContext) {
 
     match status {
         Ok(_) => {
+            println!("{status:?}");
             unreachable!("Should be error but it wasn't");
         }
         Err(e) => {
@@ -705,6 +706,7 @@ async fn search_unexist_file_content(ctx: &mut BstoreAsyncContext) {
 
     match status {
         Ok(_) => {
+            println!("{status:?}");
             unreachable!("Should be error but it wasn't");
         }
         Err(e) => {
