@@ -161,15 +161,8 @@ pub fn create_routes(db: PathBuf) -> Result<Router, Error> {
 ///
 /// # Panics
 ///
-/// Panics if fail to install Ctrl+C handler
-pub async fn shutdown_signal() {
-    let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-        tracing::info!("ctrl_c signal received in task, starting graceful shutdown");
-    };
-
+/// Panics if fail to install signals handler
+async fn shutdown_signal() {
     #[cfg(unix)]
     let terminate = async {
         signal::unix::signal(signal::unix::SignalKind::terminate())
@@ -179,13 +172,41 @@ pub async fn shutdown_signal() {
         tracing::info!("terminate signal received in task, starting graceful shutdown");
     };
 
+    #[cfg(unix)]
+    let quit = async {
+        signal::unix::signal(signal::unix::SignalKind::quit())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+        tracing::info!("quit signal received in task, starting graceful shutdown");
+    };
+
+    #[cfg(unix)]
+    let interrupt = async {
+        signal::unix::signal(signal::unix::SignalKind::interrupt())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+        tracing::info!("interrupt signal received in task, starting graceful shutdown");
+    };
+
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
 
-    tokio::select! {
-        () = ctrl_c => {},
-        () = terminate => {},
-    }
+    #[cfg(not(unix))]
+    let quit = std::future::pending::<()>();
 
-    println!("signal received, starting graceful shutdown");
+    #[cfg(not(unix))]
+    let interrupt = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+        tracing::info!("ctrl_c signal received in task, starting graceful shutdown");
+    };
+
+    tokio::select! {
+        () = terminate => {},
+        () = quit => {},
+        () = interrupt => {},
+    }
 }
