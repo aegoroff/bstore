@@ -38,14 +38,6 @@ pub async fn insert_many_from_form(
     State(db): State<Arc<Mutex<Sqlite>>>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    // let mut repository = match Sqlite::open(db.as_path(), Mode::ReadWrite) {
-    //     Ok(s) => s,
-    //     Err(e) => {
-    //         tracing::error!("{e}");
-    //         return internal_server_error(&e);
-    //     }
-    // };
-
     tracing::info!("create bucket: {bucket}");
     let mut inserted: Vec<i64> = vec![];
     let mut repository = db.lock().await;
@@ -129,7 +121,6 @@ pub async fn insert_zipped_bucket(
 ) -> Result<impl IntoResponse, String> {
     match read_from_stream(body.into_data_stream()).await {
         Ok((data, _)) => {
-            //execute(&db, Mode::ReadWrite, move |mut repository| {
             let mut repository = db.lock().await;
             let mut inserted: Vec<i64> = vec![];
             // Zip archive branch
@@ -179,7 +170,6 @@ pub async fn insert_zipped_bucket(
             }
 
             Ok(created(Json(inserted)))
-            //})
         }
         Err(e) => {
             tracing::error!("{e}");
@@ -205,7 +195,6 @@ pub async fn delete_bucket(
     Path(bucket): Path<String>,
     State(db): State<Arc<Mutex<Sqlite>>>,
 ) -> Result<impl IntoResponse, String> {
-    //execute(&db, Mode::ReadWrite, move |mut repository| {
     let mut repository = db.lock().await;
     let delete_result = repository.delete_bucket(&bucket);
     let result = match delete_result {
@@ -230,7 +219,6 @@ pub async fn delete_bucket(
         StatusCode::OK
     };
     Ok((status, Json(result)))
-    //})
 }
 
 /// Lists all buckets
@@ -245,11 +233,9 @@ pub async fn delete_bucket(
 pub async fn get_buckets(
     State(db): State<Arc<Mutex<Sqlite>>>,
 ) -> Result<impl IntoResponse, String> {
-    //execute(&db, Mode::ReadOnly, move |mut repository| {
     let mut repository = db.lock().await;
     let result = repository.get_buckets().unwrap_or_default();
     Ok(Json(result))
-    //})
 }
 
 /// Lists all files from a bucket
@@ -269,7 +255,6 @@ pub async fn get_files(
     Path(bucket): Path<String>,
     State(db): State<Arc<Mutex<Sqlite>>>,
 ) -> Result<impl IntoResponse, String> {
-    //execute(&db, Mode::ReadOnly, move |mut repository| {
     let mut repository = db.lock().await;
     let result = repository.get_files(&bucket).unwrap_or_default();
     let status = if result.is_empty() {
@@ -278,7 +263,6 @@ pub async fn get_files(
         StatusCode::OK
     };
     Ok((status, Json(result)))
-    //})
 }
 
 /// Gets last inserted file info a bucket
