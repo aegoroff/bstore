@@ -2,7 +2,10 @@
 
 # Build service
 FROM --platform=$BUILDPLATFORM messense/rust-musl-cross:aarch64-musl AS rust-build
- 
+RUN rustup toolchain uninstall stable-x86_64-unknown-linux-gnu && \
+    rustup toolchain install stable-x86_64-unknown-linux-gnu && \
+    rustup update stable && \
+    rustup target add aarch64-unknown-linux-musl
 COPY .cargo/ ./.cargo/
 COPY bstore/ ./bstore/
 COPY client/ ./client/
