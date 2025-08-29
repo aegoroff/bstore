@@ -7,3 +7,5 @@ docker manifest create $full_tag --amend ${full_tag}-x64 --amend ${full_tag}-arm
 docker push "${full_tag}-x64"
 docker push "${full_tag}-arm64"
 docker manifest push --purge $full_tag
+docker manifest create $full_tag --amend ${full_tag}-x64 --amend ${full_tag}-arm64
+docker manifest push --purge $full_tag
