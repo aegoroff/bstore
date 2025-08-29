@@ -96,7 +96,7 @@ pub async fn list_buckets(uri: &str) {
             Err(e) => println!("JSON decode error: {e}"),
         },
         Err(e) => {
-            println!("error: {e}");
+            println!("error: {e:?}");
         }
     }
 }
