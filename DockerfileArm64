@@ -14,7 +14,7 @@ COPY kernel/ ./kernel/
 COPY Cargo.toml ./
 RUN cargo build --workspace --target aarch64-unknown-linux-musl --release 
 
-FROM gcr.io/distroless/static-debian12:latest
+FROM gcr.io/distroless/static-debian13:latest
 ENV BSTORE_PORT=5000 \
     BSTORE_DATA_DIR=/data/data \
     BSTORE_DATA_FILE=bstore.db
