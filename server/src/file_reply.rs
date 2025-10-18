@@ -82,7 +82,11 @@ mod tests {
     #[test_case("dir/file.ext", "file.ext" ; "file in dir")]
     #[test_case("dir\\file.ext", "file.ext" ; "file in dir backslashed")]
     #[test_case("dir1\\dir2\\file.ext", "file.ext" ; "file in two dirs backslashed")]
+    #[test_case("C:\\dir1/dir2\\file.ext", "file.ext" ; "mixed separators")]
     #[test_case("dir1/dir2/file.ext", "file.ext" ; "file in two dirs")]
+    #[test_case("dir1/dir2/", "" ; "Only dir Unix")]
+    #[test_case("dir1\\dir2\\", "" ; "Only dir Windows")]
+    #[test_case("c:\\", "" ; "Only drive Windows")]
     fn name_from_path(path: &str, expected: &str) {
         // Arrange
         let file = File {
