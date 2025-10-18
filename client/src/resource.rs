@@ -18,6 +18,15 @@ impl Resource {
         Some(Resource { url: base })
     }
 
+    /// Appends a path to the current URL, handling both existing path segments and path joining.
+    ///
+    /// This function intelligently manages path separators and ensures consistent URL formatting.
+    ///
+    /// # Arguments
+    /// * `path` - The path segment to append, which will be split by separators (default: '/').
+    ///
+    /// # Returns
+    /// * `&mut Self` - The modified instance for method chaining.
     pub fn append_path(&mut self, path: &str) -> &mut Self {
         if let Some(segments) = self.url.path_segments() {
             let p = segments
