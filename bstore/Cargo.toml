@@ -9,7 +9,7 @@ license = "MIT"
 [dependencies]
 client = { path = "../client" }
 server = { path = "../server" }
-clap = { version = "4.5.49", features = ["std", "color", "suggestions", "cargo"] }
+clap = { version = "4.5.50", features = ["std", "color", "suggestions", "cargo"] }
 serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["full"] }
 bugreport = "0.5.1"
