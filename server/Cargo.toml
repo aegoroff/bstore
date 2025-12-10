@@ -20,7 +20,7 @@ futures = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing = "0.1"
 tower = { version = "0.5.2", features = ["util", "timeout"] }
-tower-http = { version = "0.6.7", features = ["add-extension", "limit", "trace"] }
+tower-http = { version = "0.6.8", features = ["add-extension", "limit", "trace"] }
 utoipa = { workspace = true, features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 rusqlite = { version = "0.37", features = ["bundled", "chrono", "blob"] }
