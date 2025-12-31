@@ -13,8 +13,8 @@ kernel = { path = "../kernel" }
 tokio = { workspace = true, features = ["full"] }
 futures-util = "0.3"
 blake3 = "1.8"
-zip = "=6.0.0"
-axum = { version = "0.8.7", features = ["multipart"] }
+zip = "=7.0.0"
+axum = { version = "0.8.8", features = ["multipart"] }
 tokio-util = { workspace = true, features = ["full"] }
 futures = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -23,7 +23,7 @@ tower = { version = "0.5.2", features = ["util", "timeout"] }
 tower-http = { version = "0.6.8", features = ["add-extension", "limit", "trace"] }
 utoipa = { workspace = true, features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
-rusqlite = { version = "0.37", features = ["bundled", "chrono", "blob"] }
+rusqlite = { version = "0.38", features = ["bundled", "chrono", "blob", "fallible_uint"] }
 
 [dev-dependencies]
 test-case = "3.3.1"

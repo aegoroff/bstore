@@ -8,7 +8,7 @@ license = "MIT"
 
 [dependencies]
 kernel = { path = "../kernel" }
-reqwest = { workspace = true, features = ["json", "multipart", "stream", "rustls-tls"] }
+reqwest = { workspace = true, features = ["json", "multipart", "stream", "rustls"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-util = { workspace = true, features = ["full"] }
 url = { workspace = true }
