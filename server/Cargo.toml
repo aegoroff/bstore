@@ -13,7 +13,7 @@ kernel = { path = "../kernel" }
 tokio = { workspace = true, features = ["full"] }
 futures-util = "0.3"
 blake3 = "1.8"
-zip = "=7.1.0"
+zip = "=7.2.0"
 axum = { version = "0.8.8", features = ["multipart"] }
 tokio-util = { workspace = true, features = ["full"] }
 futures = { workspace = true }
