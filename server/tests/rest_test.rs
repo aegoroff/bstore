@@ -7,7 +7,7 @@ use futures::future::join_all;
 use kernel::Bucket;
 use kernel::DeleteResult;
 use kernel::File as FileItem;
-use rand::Rng;
+use rand::RngExt;
 use reqwest::Client;
 use reqwest::StatusCode;
 use serial_test::serial;
