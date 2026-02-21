@@ -13,7 +13,7 @@ kernel = { path = "../kernel" }
 tokio = { workspace = true, features = ["full"] }
 futures-util = "0.3"
 blake3 = "1.8"
-zip = "=7.4.0"
+zip = "=8.1.0"
 axum = { version = "0.8.8", features = ["multipart"] }
 tokio-util = { workspace = true, features = ["full"] }
 futures = { workspace = true }
@@ -29,14 +29,14 @@ rusqlite = { version = "0.38", features = ["bundled", "chrono", "blob", "fallibl
 test-case = "3.3.1"
 reqwest = { workspace = true, features = ["json", "multipart", "stream"] }
 test-context = "0.5.4"
-uuid = { version = "1.20.0", features = [
+uuid = { version = "1.21.0", features = [
     "v4",                # Lets you generate random UUIDs
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
     "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
 ]}
 rand = "0.10.0"
 url-escape = "0.1.1"
-serial_test = "3.3.1"
+serial_test = "3.4.0"
 urlencoding = "2.1.3"
 
 [lints]
