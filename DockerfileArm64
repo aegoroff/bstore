@@ -6,6 +6,7 @@ RUN rustup toolchain uninstall stable-x86_64-unknown-linux-gnu && \
     rustup toolchain install stable-x86_64-unknown-linux-gnu && \
     rustup update stable && \
     rustup target add aarch64-unknown-linux-musl
+RUN rustup -V
 COPY .cargo/ ./.cargo/
 COPY bstore/ ./bstore/
 COPY client/ ./client/
