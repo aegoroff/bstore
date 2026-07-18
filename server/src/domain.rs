@@ -1,5 +1,4 @@
 use std::fmt::{Debug, Display};
-use std::io::Read;
 
 use kernel::{Bucket, DeleteResult, File};
 
@@ -17,8 +16,6 @@ pub trait Storage {
     fn get_files(&mut self, bucket: &str) -> Result<Vec<File>, Self::Err>;
 
     fn get_last_file(&mut self, bucket: &str) -> Result<File, Self::Err>;
-
-    fn get_file_data(&self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err>;
 
     fn get_file_info(&mut self, id: i64) -> Result<File, Self::Err>;
 

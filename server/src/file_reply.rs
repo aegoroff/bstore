@@ -10,14 +10,14 @@ use utoipa::{
 };
 
 pub struct FileReply {
-    data: Vec<u8>,
+    body: Body,
     file: File,
 }
 
 impl FileReply {
     #[must_use]
-    pub fn new(data: Vec<u8>, file: File) -> Self {
-        Self { data, file }
+    pub fn new(body: Body, file: File) -> Self {
+        Self { body, file }
     }
 
     fn name_from_path(&self) -> &str {
@@ -33,7 +33,7 @@ impl FileReply {
 impl IntoResponse for FileReply {
     fn into_response(self) -> Response {
         let file_name = self.name_from_path().to_owned();
-        let mut res = Body::from(self.data).into_response();
+        let mut res = self.body.into_response();
         res.headers_mut().insert(
             "content-type",
             HeaderValue::from_static("application/octet-stream"),
@@ -96,7 +96,7 @@ mod tests {
             blake3_hash: String::new(),
             size: 1,
         };
-        let reply = FileReply::new(Vec::new(), file);
+        let reply = FileReply::new(Body::empty(), file);
 
         // Act
         let name = reply.name_from_path();

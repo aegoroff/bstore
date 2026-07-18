@@ -313,18 +313,15 @@ pub async fn get_file_content(
         Err(e) => return (StatusCode::NOT_FOUND, e.to_string().into_response()),
     };
 
-    let mut rdr = match repository.get_file_data(id) {
+    let rowid = match repository.get_blob_rowid(id) {
         Ok(r) => r,
         Err(e) => return (StatusCode::NOT_FOUND, e.to_string().into_response()),
     };
+    let path = repository.path().to_path_buf();
+    drop(repository);
 
-    // NOTE: Find way to pass raw Read to stream
-    let mut content = Vec::<u8>::with_capacity(info.size);
-    let size = rdr.read_to_end(&mut content).unwrap_or_default();
-    tracing::info!("File size {}", size);
-
-    let result = Ok(FileReply::new(content, info));
-    make_response(result)
+    tracing::info!("Streaming file id={id} size={}", info.size);
+    make_response(Ok(FileReply::new(Sqlite::stream_blob(path, rowid), info)))
 }
 
 /// Gets file's information by file id
@@ -377,17 +374,15 @@ pub async fn search_and_get_file_content(
         Err(e) => return (StatusCode::NOT_FOUND, e.to_string().into_response()),
     };
 
-    let mut rdr = match repository.get_file_data(info.id) {
+    let rowid = match repository.get_blob_rowid(info.id) {
         Ok(r) => r,
         Err(e) => return (StatusCode::NOT_FOUND, e.to_string().into_response()),
     };
+    let path = repository.path().to_path_buf();
+    drop(repository);
 
-    // NOTE: Find way to pass raw Read to stream
-    let mut content = Vec::<u8>::with_capacity(info.size);
-    let size = rdr.read_to_end(&mut content).unwrap_or_default();
-    tracing::info!("File size {}", size);
-
-    make_response(Ok(FileReply::new(content, info)))
+    tracing::info!("Streaming file id={} size={}", info.id, info.size);
+    make_response(Ok(FileReply::new(Sqlite::stream_blob(path, rowid), info)))
 }
 
 macro_rules! delete_file {

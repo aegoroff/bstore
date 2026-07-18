@@ -1,6 +1,7 @@
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use axum::body::{Body, Bytes};
 use kernel::{Bucket, DeleteResult, File};
 use rusqlite::blob::ZeroBlob;
 use rusqlite::{Connection, Error, ErrorCode, MAIN_DB, OpenFlags, Row, Transaction, params};
@@ -8,6 +9,7 @@ use rusqlite::{Connection, Error, ErrorCode, MAIN_DB, OpenFlags, Row, Transactio
 use crate::domain::Storage;
 
 const CACHE_SIZE: &str = "16384";
+const BLOB_STREAM_CHUNK_SIZE: usize = 64 * 1024;
 
 #[derive(Copy, Clone)]
 pub enum Mode {
@@ -17,6 +19,7 @@ pub enum Mode {
 
 pub struct Sqlite {
     conn: Connection,
+    path: PathBuf,
 }
 
 impl Storage for Sqlite {
@@ -176,18 +179,6 @@ impl Storage for Sqlite {
         stmt.query_row([bucket], Sqlite::to_file)
     }
 
-    fn get_file_data(&self, id: i64) -> Result<Box<dyn Read + '_>, Self::Err> {
-        self.enable_foreign_keys()?;
-        self.set_synchronous_full()?;
-
-        let mut stmt = self.conn.prepare("SELECT rowid FROM blob WHERE blake3_hash IN (SELECT blake3_hash FROM file WHERE id = ?1)")?;
-        let rowid: i64 = stmt.query_row([id], |r| r.get(0))?;
-        stmt.finalize()?;
-
-        let b = self.conn.blob_open(MAIN_DB, "blob", "data", rowid, true)?;
-        Ok(Box::new(b))
-    }
-
     fn get_file_info(&mut self, id: i64) -> Result<File, Self::Err> {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
@@ -238,11 +229,78 @@ impl Storage for Sqlite {
 
 impl Sqlite {
     pub fn open<P: AsRef<Path>>(path: P, mode: Mode) -> Result<Sqlite, Error> {
+        let path = path.as_ref().to_path_buf();
         let c = match mode {
-            Mode::ReadWrite => Connection::open(path),
-            Mode::ReadOnly => Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY),
+            Mode::ReadWrite => Connection::open(&path),
+            Mode::ReadOnly => Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY),
         };
-        Ok(Self { conn: c? })
+        Ok(Self { conn: c?, path })
+    }
+
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn get_blob_rowid(&self, id: i64) -> Result<i64, Error> {
+        self.enable_foreign_keys()?;
+        self.set_synchronous_full()?;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT rowid FROM blob WHERE blake3_hash IN (SELECT blake3_hash FROM file WHERE id = ?1)",
+        )?;
+        let rowid: i64 = stmt.query_row([id], |r| r.get(0))?;
+        stmt.finalize()?;
+        Ok(rowid)
+    }
+
+    /// Streams blob bytes from a dedicated read-only connection without buffering the whole file.
+    pub fn stream_blob(path: PathBuf, rowid: i64) -> Body {
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(2);
+
+        tokio::task::spawn_blocking(move || {
+            let send_err = |e: std::io::Error| {
+                let _ = tx.blocking_send(Err(e));
+            };
+
+            let conn = match Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+                Ok(c) => c,
+                Err(e) => {
+                    send_err(std::io::Error::other(e));
+                    return;
+                }
+            };
+
+            let mut blob = match conn.blob_open(MAIN_DB, "blob", "data", rowid, true) {
+                Ok(b) => b,
+                Err(e) => {
+                    send_err(std::io::Error::other(e));
+                    return;
+                }
+            };
+
+            let mut buf = vec![0u8; BLOB_STREAM_CHUNK_SIZE];
+            loop {
+                let n = match blob.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => n,
+                    Err(e) => {
+                        send_err(std::io::Error::other(e));
+                        break;
+                    }
+                };
+                if tx
+                    .blocking_send(Ok(Bytes::copy_from_slice(&buf[..n])))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+
+        Body::from_stream(futures::stream::unfold(rx, |mut rx| async move {
+            rx.recv().await.map(|item| (item, rx))
+        }))
     }
 
     fn enable_foreign_keys(&self) -> Result<(), Error> {
