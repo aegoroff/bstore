@@ -34,7 +34,7 @@ pub async fn insert_file(params: FileParams) {
         .append_path(&params.bucket)
         .append_path(&file_url);
 
-    let error_message = format!("no such file {}", &params.file);
+    let error_message = format!("no such file {}", params.file);
     let f = File::open(&params.file).await.expect(&error_message);
     let stream = ReaderStream::new(f);
     let stream = reqwest::Body::wrap_stream(stream);
