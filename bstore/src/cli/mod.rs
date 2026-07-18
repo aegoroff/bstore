@@ -1,6 +1,6 @@
+pub mod bugreport;
 pub mod client;
 pub mod server;
-pub mod bugreport;
 
 pub const SERVER_SUBCOMMAND: &str = "server";
 pub const SERVER_DESCRIPTION: &str = "Run the server";
