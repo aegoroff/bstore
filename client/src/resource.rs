@@ -38,10 +38,10 @@ impl Resource {
                     y
                 });
 
-            let path_to_set = if path.chars().next_back().unwrap_or_default() == SEP {
+            let path_to_set = if path.ends_with(SEP) {
                 &p
             } else {
-                &p[..p.len() - 1]
+                p.strip_suffix(SEP).unwrap_or(&p)
             };
             self.url.set_path(path_to_set);
         } else {
@@ -118,6 +118,8 @@ mod tests {
         "https://github.com/aegoroff/dirstat/releases/download/v1.0.7/dirstat_1.0.7_darwin_amd64.tar.gz" ; "real_slashless_base"
     )]
     #[test_case("http://localhost", "http://:/", "http://localhost/http:/:/" ; "21")]
+    #[test_case("http://localhost", "", "http://localhost/" ; "empty path")]
+    #[test_case("http://localhost/x", "", "http://localhost/x" ; "empty path with base path")]
     fn append_path_tests(base: &str, path: &str, expected: &str) {
         // Arrange
         let mut r = Resource::new(base).unwrap();

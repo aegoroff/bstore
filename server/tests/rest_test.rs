@@ -207,7 +207,7 @@ impl AsyncTestContext for BstoreAsyncContext {
             .unwrap();
 
         let task = tokio::spawn(async move {
-            let app = server::create_routes(cloned_db).unwrap();
+            let app = server::create_routes(&cloned_db).unwrap();
             axum::serve(listener, app)
                 .with_graceful_shutdown(async { recv.await.unwrap() })
                 .await
@@ -834,4 +834,103 @@ async fn search_and_delete_file_failure(ctx: &mut BstoreAsyncContext) {
             assert_eq!(StatusCode::NOT_FOUND, e.status().unwrap());
         }
     }
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
+async fn get_unexist_file_info(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let file_uri = format!("http://localhost:{}/api/file/30000/meta", ctx.port);
+
+    // Act
+    let response = client.get(file_uri).send().await.unwrap();
+
+    // Assert
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
+async fn insert_one_duplicate_conflict(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}/file.txt", ctx.port);
+    client.post(&uri).body("first").send().await.unwrap();
+
+    // Act
+    let response = client.post(&uri).body("second").send().await.unwrap();
+
+    // Assert
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
+async fn insert_many_from_form_with_duplicate_inserts_nothing(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}", ctx.port);
+    let form = reqwest::multipart::Form::new()
+        .part(
+            "file",
+            reqwest::multipart::Part::bytes(b"1".to_vec()).file_name("same"),
+        )
+        .part(
+            "file",
+            reqwest::multipart::Part::bytes(b"2".to_vec()).file_name("same"),
+        );
+
+    // Act
+    let response = client.post(&uri).multipart(form).send().await.unwrap();
+
+    // Assert
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let files = client.get(&uri).send().await.unwrap();
+    assert_eq!(files.status(), StatusCode::NOT_FOUND);
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
+async fn insert_invalid_zip_bad_request(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}/zip", ctx.port);
+
+    // Act
+    let response = client.post(uri).body("not a zip").send().await.unwrap();
+
+    // Assert
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[test_context(BstoreAsyncContext)]
+#[tokio::test]
+#[serial]
+async fn search_file_content_returns_inserted_bytes(ctx: &mut BstoreAsyncContext) {
+    // Arrange
+    let client = Client::new();
+    let bucket = Uuid::new_v4();
+    let uri = format!("http://localhost:{}/api/{bucket}/file.bin", ctx.port);
+    let content: Vec<u8> = (0..200_000u32).map(|x| (x % 251) as u8).collect();
+    client
+        .post(&uri)
+        .body(content.clone())
+        .send()
+        .await
+        .unwrap();
+
+    // Act
+    let response = client.get(&uri).send().await.unwrap();
+
+    // Assert
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.bytes().await.unwrap().as_ref(), content.as_slice());
 }

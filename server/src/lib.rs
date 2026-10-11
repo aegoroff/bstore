@@ -4,15 +4,12 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 
-use std::{path::PathBuf, sync::Arc};
-
 use axum::{
     Router,
     extract::DefaultBodyLimit,
     routing::post,
     routing::{delete, get},
 };
-use futures::lock::Mutex;
 use rusqlite::Error;
 use std::time::Duration;
 use tokio::signal;
@@ -27,6 +24,7 @@ pub mod file_reply;
 mod handlers;
 pub mod sqlite;
 
+use crate::handlers::AppState;
 use crate::sqlite::{Mode, Sqlite};
 use crate::{domain::Storage, file_reply::FileReply};
 use std::env;
@@ -41,7 +39,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 const DB_FILE: &str = "bstore.db";
 const CURRENT_DIR: &str = "./";
 
-pub async fn run() {
+pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG")
@@ -55,33 +53,30 @@ pub async fn run() {
     let dir = env::var("BSTORE_DATA_DIR").unwrap_or_else(|_| String::from(CURRENT_DIR));
     let port = env::var("BSTORE_PORT").unwrap_or_else(|_| String::from("5000"));
 
-    // Start init
-    let db = Path::new(&dir).join(&db_file);
-    if !db.exists() {
-        Sqlite::open(db.clone(), Mode::ReadWrite)
-            .expect("Database file cannot be created")
-            .new_database()
-            .unwrap_or_default();
-    }
+    let port: u16 = port
+        .parse()
+        .map_err(|e| format!("Invalid BSTORE_PORT value '{port}': {e}"))?;
 
-    let listen_socket = SocketAddr::from(([0, 0, 0, 0], port.parse().unwrap_or_default()));
+    // Start init
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Cannot create data directory '{dir}': {e}"))?;
+    let db = Path::new(&dir).join(&db_file);
+    Sqlite::open(&db, Mode::ReadWrite)
+        .and_then(|storage| storage.new_database())
+        .map_err(|e| format!("Cannot initialize database '{}': {e}", db.display()))?;
+
+    let listen_socket = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("listening on {listen_socket}");
 
-    match create_routes(db) {
-        Ok(app) => {
-            if let Ok(listener) = tokio::net::TcpListener::bind(listen_socket).await {
-                if let Err(e) = axum::serve(listener, app)
-                    .with_graceful_shutdown(shutdown_signal())
-                    .await
-                {
-                    tracing::error!("Sever run failed with: {e}");
-                }
-            } else {
-                tracing::error!("Failed to start server at 0.0.0.0:{port}");
-            }
-        }
-        Err(err) => tracing::error!("Failed to start server. Error:{err:?}"),
-    }
+    let app = create_routes(&db)?;
+    let listener = tokio::net::TcpListener::bind(listen_socket)
+        .await
+        .map_err(|e| format!("Failed to start server at {listen_socket}: {e}"))?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .map_err(|e| format!("Server run failed with: {e}"))?;
+    Ok(())
 }
 
 #[derive(OpenApi)]
@@ -110,7 +105,7 @@ pub async fn run() {
     )]
 struct ApiDoc;
 
-pub fn create_routes(db: PathBuf) -> Result<Router, Error> {
+pub fn create_routes(db: &Path) -> Result<Router, Error> {
     let file_api = Router::new()
         .route(
             "/{id}",
@@ -136,8 +131,8 @@ pub fn create_routes(db: PathBuf) -> Result<Router, Error> {
         .route("/{bucket}/zip", post(handlers::insert_zipped_bucket))
         .nest("/file/", file_api);
 
-    let storage = Sqlite::open(db.clone(), Mode::ReadWrite)?;
-    let storage = Arc::new(Mutex::new(storage));
+    let storage = Sqlite::open(db, Mode::ReadWrite)?;
+    let state = AppState::new(storage, db);
     Ok(Router::new()
         .merge(SwaggerUi::new("/swagger").url("/api-doc/openapi.json", ApiDoc::openapi()))
         .nest("/api/", api)
@@ -154,7 +149,7 @@ pub fn create_routes(db: PathBuf) -> Result<Router, Error> {
                 ))
                 .into_inner(),
         )
-        .with_state(storage))
+        .with_state(state))
 }
 
 /// .

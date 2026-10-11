@@ -12,6 +12,7 @@ description = "Small microservice that implementes blob storage with SQLite back
 kernel = { path = "../kernel" }
 tokio = { workspace = true, features = ["full"] }
 futures-util = "0.3"
+http-body-util = "0.1"
 blake3 = "1.8"
 zip = "=8.6.0"
 axum = { version = "0.8.9", features = ["multipart"] }

@@ -1,4 +1,6 @@
-use clap::{Command, arg, command, crate_name};
+use std::error::Error;
+
+use clap::{ArgMatches, Command, arg, command, crate_name};
 use cli::client::{insert_single_file, list_buckets};
 use client::FileParams;
 
@@ -46,15 +48,23 @@ async fn main() {
         .disable_version_flag(true)
         .get_matches();
 
+    if let Err(e) = run(&cli).await {
+        eprintln!("{e}");
+        std::process::exit(1);
+    }
+}
+
+async fn run(cli: &ArgMatches) -> Result<(), Box<dyn Error>> {
     if cli.subcommand_matches(cli::BUGREPORT_SUBCOMMAND).is_some() {
         cli::bugreport::run();
+        Ok(())
     } else if let Some(server_matches) = cli.subcommand_matches(cli::SERVER_SUBCOMMAND) {
-        cli::server::run(server_matches).await;
+        cli::server::run(server_matches).await
     } else if let Some(insert_matches) = cli.subcommand_matches(cli::INSERT_SUBCOMMAND) {
-        let uri = insert_matches.get_one::<String>("uri").unwrap();
+        let uri = required_arg(insert_matches, "uri")?;
         if let Some(file_matches) = insert_matches.subcommand_matches(cli::FILE_SUBCOMMAND) {
-            let file = file_matches.get_one::<String>("file").unwrap();
-            let bucket = file_matches.get_one::<String>("bucket").unwrap();
+            let file = required_arg(file_matches, "file")?;
+            let bucket = required_arg(file_matches, "bucket")?;
             let new_file_name = file_matches.get_one::<String>("name");
             let params = FileParams {
                 uri: uri.clone(),
@@ -62,15 +72,27 @@ async fn main() {
                 bucket: bucket.clone(),
                 new_file_name: new_file_name.cloned(),
             };
-            insert_single_file(params).await;
+            insert_single_file(params).await
+        } else {
+            Ok(())
         }
     } else if let Some(insert_matches) = cli.subcommand_matches(cli::LIST_SUBCOMMAND) {
-        let uri = insert_matches.get_one::<String>("uri").unwrap();
+        let uri = required_arg(insert_matches, "uri")?;
         if insert_matches
             .subcommand_matches(cli::BUCKET_SUBCOMMAND)
             .is_some()
         {
-            list_buckets(uri).await;
+            list_buckets(uri).await
+        } else {
+            Ok(())
         }
+    } else {
+        Ok(())
     }
+}
+
+fn required_arg<'a>(matches: &'a ArgMatches, name: &str) -> Result<&'a String, String> {
+    matches
+        .get_one::<String>(name)
+        .ok_or_else(|| format!("missing required argument: {name}"))
 }

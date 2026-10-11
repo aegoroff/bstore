@@ -1,15 +1,27 @@
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::io::Read;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
 
 use axum::body::{Body, Bytes};
 use kernel::{Bucket, DeleteResult, File};
-use rusqlite::blob::ZeroBlob;
-use rusqlite::{Connection, Error, ErrorCode, MAIN_DB, OpenFlags, Row, Transaction, params};
+use rusqlite::blob::{Blob, ZeroBlob};
+use rusqlite::{
+    Connection, Error, ErrorCode, MAIN_DB, OpenFlags, Row, Transaction, TransactionBehavior, params,
+};
+use tokio::sync::{mpsc, oneshot};
 
-use crate::domain::Storage;
+use crate::domain::{InsertError, NewFile, Storage};
 
 const CACHE_SIZE: &str = "16384";
 const BLOB_STREAM_CHUNK_SIZE: usize = 64 * 1024;
+const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_BUSY_ATTEMPTS: u32 = 3;
+
+const SELECT_FILE: &str = "SELECT file.id, file.path, file.bucket, blob.size, file.blake3_hash, blob.rowid \
+                           FROM file INNER JOIN blob ON file.blake3_hash = blob.blake3_hash";
+
+type Chunk = Result<Bytes, std::io::Error>;
 
 #[derive(Copy, Clone)]
 pub enum Mode {
@@ -17,9 +29,14 @@ pub enum Mode {
     ReadOnly,
 }
 
+/// Identifies a file to read
+pub enum FileLocator {
+    Id(i64),
+    Path { bucket: String, path: String },
+}
+
 pub struct Sqlite {
     conn: Connection,
-    path: PathBuf,
 }
 
 impl Storage for Sqlite {
@@ -30,7 +47,7 @@ impl Storage for Sqlite {
         self.pragma_update("journal_mode", "WAL")?;
 
         self.conn.execute(
-            "CREATE TABLE blob (
+            "CREATE TABLE IF NOT EXISTS blob (
                   blake3_hash    TEXT PRIMARY KEY,
                   data           BLOB NOT NULL,
                   size           INTEGER NOT NULL
@@ -39,7 +56,7 @@ impl Storage for Sqlite {
         )?;
 
         self.conn.execute(
-            "CREATE TABLE file (
+            "CREATE TABLE IF NOT EXISTS file (
                   id           INTEGER PRIMARY KEY AUTOINCREMENT,
                   blake3_hash  TEXT NOT NULL REFERENCES blob(blake3_hash) ON DELETE RESTRICT ON UPDATE RESTRICT,
                   path         TEXT NOT NULL,
@@ -49,69 +66,34 @@ impl Storage for Sqlite {
         )?;
 
         self.conn.execute(
-            "CREATE UNIQUE INDEX bucket_path_unique_ix ON file(path, bucket)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS bucket_path_unique_ix ON file(path, bucket)",
             [],
         )?;
 
         Ok(())
     }
 
-    /// inserts new file into bucket and return it's id
-    fn insert_file(&mut self, path: &str, bucket: &str, data: Vec<u8>) -> Result<i64, Self::Err> {
-        self.assign_cache_size()?;
-        self.enable_foreign_keys()?;
-        self.set_synchronous_full()?;
+    fn insert_files<E>(
+        &mut self,
+        bucket: &str,
+        files: impl IntoIterator<Item = Result<NewFile, E>>,
+    ) -> Result<Vec<i64>, InsertError<Self::Err, E>> {
+        self.assign_cache_size()
+            .and_then(|()| self.enable_foreign_keys())
+            .and_then(|()| self.set_synchronous_full())
+            .map_err(InsertError::Storage)?;
 
-        let hash = blake3::hash(&data);
-        let hash = hash.to_string();
-
-        Sqlite::execute_with_retry(|| {
-            let tx = self.conn.transaction()?;
-
-            let mut stmt = tx.prepare("SELECT blake3_hash FROM blob WHERE blake3_hash = ?1")?;
-
-            let exists = stmt.exists(params![&hash])?;
-            stmt.finalize()?;
-
-            if !exists {
-                // Insert only uniqueue blob so as not to have duplicates.
-                // If binary data already in DB just link existing
-                // data with new file item
-                // ZeroBlob accepts only i32 so max file size limited to 2GB
-                let len = i32::try_from(data.len()).unwrap_or(i32::MAX);
-                tx.execute(
-                    "INSERT INTO blob (blake3_hash, data, size) VALUES (?1, ?2, ?3)",
-                    params![&hash, &ZeroBlob(len), len],
-                )?;
-
-                let rowid = tx.last_insert_rowid();
-
-                let mut blob = tx.blob_open(MAIN_DB, "blob", "data", rowid, false)?;
-                if let Err(e) = blob.write_all(&data) {
-                    tracing::error!("{e}");
-                }
-                blob.flush().unwrap_or_default();
-                blob.close()?;
-            }
-
-            tx.prepare_cached(
-                "INSERT INTO file (blake3_hash, path, bucket)
-                 VALUES (?1, ?2, ?3)",
-            )?
-            .execute(params![&hash, path, bucket])?;
-
-            let mut stmt = tx.prepare("SELECT MAX(id) FROM file")?;
-
-            let id = stmt.query_row([], |row| {
-                let id = row.get(0)?;
-                Ok(id)
-            })?;
-            stmt.finalize()?;
-
-            tx.commit()?;
-
-            Ok(id)
-        })
+        // The source cannot be replayed so the write lock is acquired before consuming it
+        // and the transaction itself never has to be retried
+        let tx = Self::begin_immediate(&self.conn).map_err(InsertError::Storage)?;
+        let mut ids = Vec::new();
+        for file in files {
+            let file = file.map_err(InsertError::Source)?;
+            let id = Self::insert_file_row(&tx, bucket, &file).map_err(InsertError::Storage)?;
+            ids.push(id);
+        }
+        tx.commit().map_err(InsertError::Storage)?;
+        Ok(ids)
     }
 
     fn delete_bucket(&mut self, bucket: &str) -> Result<DeleteResult, Self::Err> {
@@ -150,32 +132,28 @@ impl Storage for Sqlite {
             Ok(b)
         })?;
 
-        Ok(buckets.filter_map(std::result::Result::ok).collect())
+        buckets.collect()
     }
 
     fn get_files(&mut self, bucket: &str) -> Result<Vec<File>, Self::Err> {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
-        let mut stmt = self.conn.prepare(
-            "SELECT file.id, file.path, file.bucket, blob.size, file.blake3_hash \
-                           FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
-                           WHERE file.bucket = ?1",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare(&format!("{SELECT_FILE} WHERE file.bucket = ?1"))?;
         let files = stmt.query_map([bucket], Sqlite::to_file)?;
 
-        Ok(files.filter_map(std::result::Result::ok).collect())
+        files.collect()
     }
 
     fn get_last_file(&mut self, bucket: &str) -> Result<File, Self::Err> {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
-        let mut stmt = self.conn.prepare(
-            "SELECT file.id, file.path, file.bucket, blob.size, file.blake3_hash \
-                           FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
-                           WHERE file.bucket = ?1 ORDER BY file.id DESC LIMIT 1",
-        )?;
+        let mut stmt = self.conn.prepare(&format!(
+            "{SELECT_FILE} WHERE file.bucket = ?1 ORDER BY file.id DESC LIMIT 1"
+        ))?;
         stmt.query_row([bucket], Sqlite::to_file)
     }
 
@@ -183,9 +161,9 @@ impl Storage for Sqlite {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
-        let mut stmt = self.conn.prepare("SELECT file.id, file.path, file.bucket, blob.size, file.blake3_hash \
-                                                       FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
-                                                       WHERE id = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare(&format!("{SELECT_FILE} WHERE file.id = ?1"))?;
         let result: File = stmt.query_row([id], Sqlite::to_file)?;
         stmt.finalize()?;
 
@@ -196,9 +174,9 @@ impl Storage for Sqlite {
         self.enable_foreign_keys()?;
         self.set_synchronous_full()?;
 
-        let mut stmt = self.conn.prepare("SELECT file.id, file.path, file.bucket, blob.size, file.blake3_hash \
-                                                       FROM file INNER JOIN blob on file.blake3_hash = blob.blake3_hash \
-                                                       WHERE bucket = ?1 AND path = ?2")?;
+        let mut stmt = self.conn.prepare(&format!(
+            "{SELECT_FILE} WHERE file.bucket = ?1 AND file.path = ?2"
+        ))?;
         let result: File = stmt.query_row([bucket, path], Sqlite::to_file)?;
         stmt.finalize()?;
 
@@ -229,78 +207,132 @@ impl Storage for Sqlite {
 
 impl Sqlite {
     pub fn open<P: AsRef<Path>>(path: P, mode: Mode) -> Result<Sqlite, Error> {
-        let path = path.as_ref().to_path_buf();
-        let c = match mode {
-            Mode::ReadWrite => Connection::open(&path),
-            Mode::ReadOnly => Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY),
+        let conn = match mode {
+            Mode::ReadWrite => Connection::open(path)?,
+            Mode::ReadOnly => Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?,
         };
-        Ok(Self { conn: c?, path })
+        conn.busy_timeout(BUSY_TIMEOUT)?;
+        Ok(Self { conn })
     }
 
-    #[must_use]
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn get_blob_rowid(&self, id: i64) -> Result<i64, Error> {
-        self.enable_foreign_keys()?;
-        self.set_synchronous_full()?;
-
-        let mut stmt = self.conn.prepare(
-            "SELECT rowid FROM blob WHERE blake3_hash IN (SELECT blake3_hash FROM file WHERE id = ?1)",
-        )?;
-        let rowid: i64 = stmt.query_row([id], |r| r.get(0))?;
-        stmt.finalize()?;
-        Ok(rowid)
-    }
-
-    /// Streams blob bytes from a dedicated read-only connection without buffering the whole file.
-    pub fn stream_blob(path: PathBuf, rowid: i64) -> Body {
-        let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(2);
+    /// Streams file content from a dedicated read-only connection without buffering the whole file.
+    /// File metadata and content are read within a single read transaction,
+    /// so concurrent writers cannot change or remove the blob being streamed.
+    pub async fn stream_file(db: Arc<Path>, locator: FileLocator) -> Result<(File, Body), Error> {
+        let (meta_tx, meta_rx) = oneshot::channel();
+        let (data_tx, data_rx) = mpsc::channel::<Chunk>(2);
 
         tokio::task::spawn_blocking(move || {
-            let send_err = |e: std::io::Error| {
-                let _ = tx.blocking_send(Err(e));
-            };
-
-            let conn = match Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
-                Ok(c) => c,
-                Err(e) => {
-                    send_err(std::io::Error::other(e));
-                    return;
-                }
-            };
-
-            let mut blob = match conn.blob_open(MAIN_DB, "blob", "data", rowid, true) {
-                Ok(b) => b,
-                Err(e) => {
-                    send_err(std::io::Error::other(e));
-                    return;
-                }
-            };
-
-            let mut buf = vec![0u8; BLOB_STREAM_CHUNK_SIZE];
-            loop {
-                let n = match blob.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => n,
-                    Err(e) => {
-                        send_err(std::io::Error::other(e));
-                        break;
-                    }
-                };
-                if tx
-                    .blocking_send(Ok(Bytes::copy_from_slice(&buf[..n])))
-                    .is_err()
-                {
-                    break;
-                }
-            }
+            Self::stream_file_blocking(&db, &locator, meta_tx, &data_tx);
         });
 
-        Body::from_stream(futures::stream::unfold(rx, |mut rx| async move {
+        let file = meta_rx.await.map_err(|_| Error::UnwindingPanic)??;
+        let body = Body::from_stream(futures::stream::unfold(data_rx, |mut rx| async move {
             rx.recv().await.map(|item| (item, rx))
-        }))
+        }));
+        Ok((file, body))
+    }
+
+    fn stream_file_blocking(
+        db: &Path,
+        locator: &FileLocator,
+        meta_tx: oneshot::Sender<Result<File, Error>>,
+        data_tx: &mpsc::Sender<Chunk>,
+    ) {
+        let mut storage = match Sqlite::open(db, Mode::ReadOnly) {
+            Ok(s) => s,
+            Err(e) => {
+                let _ = meta_tx.send(Err(e));
+                return;
+            }
+        };
+        let read_tx = match storage.conn.transaction() {
+            Ok(t) => t,
+            Err(e) => {
+                let _ = meta_tx.send(Err(e));
+                return;
+            }
+        };
+        let (file, mut blob) = match Self::open_file_blob(&read_tx, locator) {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = meta_tx.send(Err(e));
+                return;
+            }
+        };
+        if meta_tx.send(Ok(file)).is_err() {
+            return;
+        }
+
+        let mut buf = vec![0u8; BLOB_STREAM_CHUNK_SIZE];
+        loop {
+            let chunk = match blob.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => Ok(Bytes::copy_from_slice(&buf[..n])),
+                Err(e) => Err(e),
+            };
+            let failed = chunk.is_err();
+            if data_tx.blocking_send(chunk).is_err() || failed {
+                break;
+            }
+        }
+    }
+
+    fn open_file_blob<'c>(
+        conn: &'c Connection,
+        locator: &FileLocator,
+    ) -> Result<(File, Blob<'c>), Error> {
+        let (file, rowid) = match locator {
+            FileLocator::Id(id) => conn.query_row(
+                &format!("{SELECT_FILE} WHERE file.id = ?1"),
+                [id],
+                Sqlite::to_file_with_rowid,
+            )?,
+            FileLocator::Path { bucket, path } => conn.query_row(
+                &format!("{SELECT_FILE} WHERE file.bucket = ?1 AND file.path = ?2"),
+                [bucket, path],
+                Sqlite::to_file_with_rowid,
+            )?,
+        };
+        let blob = conn.blob_open(MAIN_DB, "blob", "data", rowid, true)?;
+        Ok((file, blob))
+    }
+
+    fn begin_immediate(conn: &Connection) -> Result<Transaction<'_>, Error> {
+        Self::execute_with_retry(|| {
+            Transaction::new_unchecked(conn, TransactionBehavior::Immediate)
+        })
+    }
+
+    fn insert_file_row(tx: &Transaction, bucket: &str, file: &NewFile) -> Result<i64, Error> {
+        let hash = blake3::hash(&file.data).to_string();
+        Self::insert_blob_if_absent(tx, &hash, &file.data)?;
+        tx.prepare_cached(
+            "INSERT INTO file (blake3_hash, path, bucket)
+             VALUES (?1, ?2, ?3)",
+        )?
+        .execute(params![hash, file.path, bucket])?;
+        Ok(tx.last_insert_rowid())
+    }
+
+    /// Inserts only unique blobs so as not to have duplicates.
+    /// If binary data is already in DB new file item just links existing data
+    fn insert_blob_if_absent(tx: &Transaction, hash: &str, data: &[u8]) -> Result<(), Error> {
+        let exists = tx
+            .prepare_cached("SELECT 1 FROM blob WHERE blake3_hash = ?1")?
+            .exists([hash])?;
+        if exists {
+            return Ok(());
+        }
+
+        // ZeroBlob accepts only i32 so max blob size is limited to 2GB
+        let len = i32::try_from(data.len()).map_err(|_| Error::BlobSizeError)?;
+        tx.prepare_cached("INSERT INTO blob (blake3_hash, data, size) VALUES (?1, ?2, ?3)")?
+            .execute(params![hash, ZeroBlob(len), len])?;
+
+        let mut blob = tx.blob_open(MAIN_DB, "blob", "data", tx.last_insert_rowid(), false)?;
+        blob.write_all_at(data, 0)?;
+        blob.close()
     }
 
     fn enable_foreign_keys(&self) -> Result<(), Error> {
@@ -338,24 +370,200 @@ impl Sqlite {
         Ok(file)
     }
 
-    /// Ignores `ErrorCode::DatabaseBusy` and retry query if so
+    fn to_file_with_rowid(row: &Row<'_>) -> Result<(File, i64), Error> {
+        Ok((Self::to_file(row)?, row.get(5)?))
+    }
+
+    /// Retries the whole action if it fails with `ErrorCode::DatabaseBusy`
+    /// even after waiting for `BUSY_TIMEOUT`.
     /// Only needed in case of changing queries not reading ones
     fn execute_with_retry<T, F>(mut action: F) -> Result<T, Error>
     where
         F: FnMut() -> Result<T, Error>,
     {
+        let mut attempt = 1;
         loop {
-            let result = action();
-            if let Err(err) = result {
-                if let Error::SqliteFailure(e, _) = err {
-                    if e.code == ErrorCode::DatabaseBusy {
-                        continue;
-                    }
-                    return Err(err);
+            match action() {
+                Err(Error::SqliteFailure(e, _))
+                    if e.code == ErrorCode::DatabaseBusy && attempt < MAX_BUSY_ATTEMPTS =>
+                {
+                    tracing::warn!("database is busy, attempt {attempt} of {MAX_BUSY_ATTEMPTS}");
+                    attempt += 1;
                 }
-                return Err(err);
+                result => return result,
             }
-            return result;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+    use rusqlite::ffi;
+    use std::convert::Infallible;
+
+    fn busy() -> Error {
+        Error::SqliteFailure(ffi::Error::new(ffi::SQLITE_BUSY), None)
+    }
+
+    #[test]
+    fn execute_with_retry_gives_up_when_always_busy() {
+        // Arrange
+        let mut attempts = 0;
+
+        // Act
+        let result: Result<(), Error> = Sqlite::execute_with_retry(|| {
+            attempts += 1;
+            Err(busy())
+        });
+
+        // Assert
+        assert!(result.is_err());
+        assert_eq!(attempts, MAX_BUSY_ATTEMPTS);
+    }
+
+    #[test]
+    fn execute_with_retry_succeeds_after_busy() -> TestResult {
+        // Arrange
+        let mut attempts = 0;
+
+        // Act
+        let result = Sqlite::execute_with_retry(|| {
+            attempts += 1;
+            if attempts == 1 {
+                Err(busy())
+            } else {
+                Ok(attempts)
+            }
+        });
+
+        // Assert
+        assert_eq!(result?, 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn execute_with_retry_does_not_retry_other_errors() {
+        // Arrange
+        let mut attempts = 0;
+
+        // Act
+        let result: Result<(), Error> = Sqlite::execute_with_retry(|| {
+            attempts += 1;
+            Err(Error::QueryReturnedNoRows)
+        });
+
+        // Assert
+        assert!(result.is_err());
+        assert_eq!(attempts, 1);
+    }
+
+    #[test]
+    fn new_database_is_idempotent() -> TestResult {
+        // Arrange
+        let storage = Sqlite::open(":memory:", Mode::ReadWrite)?;
+        storage.new_database()?;
+
+        // Act
+        let result = storage.new_database();
+
+        // Assert
+        assert!(result.is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn insert_files_is_atomic() -> TestResult {
+        // Arrange
+        let mut storage = Sqlite::open(":memory:", Mode::ReadWrite)?;
+        storage.new_database()?;
+        let files = [
+            NewFile {
+                path: "a".to_owned(),
+                data: b"1".to_vec(),
+            },
+            NewFile {
+                path: "a".to_owned(),
+                data: b"2".to_vec(),
+            },
+        ];
+
+        // Act
+        let result = storage.insert_files("b", files.into_iter().map(Ok::<_, Infallible>));
+
+        // Assert
+        assert!(matches!(result, Err(InsertError::Storage(_))));
+        assert!(storage.get_files("b")?.is_empty());
+        assert_eq!(storage.delete_bucket("b")?.blobs, 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn insert_files_returns_ids_in_order_and_stores_content() -> TestResult {
+        // Arrange
+        let mut storage = Sqlite::open(":memory:", Mode::ReadWrite)?;
+        storage.new_database()?;
+        let files = [
+            NewFile {
+                path: "a".to_owned(),
+                data: b"same".to_vec(),
+            },
+            NewFile {
+                path: "b".to_owned(),
+                data: b"same".to_vec(),
+            },
+            NewFile {
+                path: "c".to_owned(),
+                data: Vec::new(),
+            },
+        ];
+
+        // Act
+        let ids = storage
+            .insert_files("bucket", files.into_iter().map(Ok::<_, Infallible>))
+            .map_err(|e| format!("{e:?}"))?;
+
+        // Assert
+        assert_eq!(ids.len(), 3);
+        let expected = [("a", 4), ("b", 4), ("c", 0)];
+        for ((path, size), id) in expected.into_iter().zip(ids) {
+            let info = storage.get_file_info(id)?;
+            assert_eq!(info.path, path);
+            assert_eq!(info.size, size);
+        }
+        let deleted = storage.delete_bucket("bucket")?;
+        assert_eq!(deleted.files, 3);
+        assert_eq!(deleted.blobs, 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn insert_files_rolls_back_when_source_fails() -> TestResult {
+        // Arrange
+        let mut storage = Sqlite::open(":memory:", Mode::ReadWrite)?;
+        storage.new_database()?;
+        let files = vec![
+            Ok(NewFile {
+                path: "a".to_owned(),
+                data: b"1".to_vec(),
+            }),
+            Err("broken source"),
+        ];
+
+        // Act
+        let result = storage.insert_files("b", files);
+
+        // Assert
+        assert!(matches!(result, Err(InsertError::Source("broken source"))));
+        assert!(storage.get_files("b")?.is_empty());
+        assert_eq!(storage.delete_bucket("b")?.blobs, 0);
+
+        Ok(())
     }
 }
