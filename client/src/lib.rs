@@ -83,7 +83,7 @@ pub async fn list_buckets(uri: &str) -> Result<(), Box<dyn Error>> {
 
     let mut table = Table::new();
     table
-        .load_preset(UTF8_HORIZONTAL_ONLY)
+        .load_style(UTF8_HORIZONTAL_ONLY)
         .set_content_arrangement(ContentArrangement::Dynamic)
         .set_width(120)
         .set_header(vec![

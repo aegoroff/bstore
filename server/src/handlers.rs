@@ -471,7 +471,8 @@ impl ZipFiles {
         if entry.is_dir() {
             return Ok(None);
         }
-        let Some(path) = entry.mangled_name().to_str().map(str::to_owned) else {
+        let name = entry.mangled_name().map_err(|e| bad_request_reply(&e))?;
+        let Some(path) = name.to_str().map(str::to_owned) else {
             tracing::warn!("zip entry {i} skipped because its name is not valid UTF-8");
             return Ok(None);
         };
